@@ -1,0 +1,15 @@
+cn                                                                                                                                                                                              
+co                                                                                                                                                                                              
+company                                                                                                                                                                                         
+description
+displayName
+gn
+l
+o
+ou
+street
+postalCode
+sn
+st
+telephoneNumber
+title

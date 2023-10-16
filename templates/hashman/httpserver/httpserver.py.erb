@@ -1,0 +1,298 @@
+#!/usr/bin/python3
+
+# **** IMPORTS ****
+
+# common
+import sys
+import os
+import logging
+import logging.handlers
+import subprocess
+import datetime
+import base64
+from subprocess import CalledProcessError
+
+# for regex
+import re
+import tempfile
+
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, session
+mypath = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, mypath + '/../common')
+from pp_auth import *
+from hashman_utils import *
+
+# variables from Puppet
+LOCALDIR = '<%= @hashmandir %>'
+COMPANY  = '<%= @hashmancompany %>'
+TITLE = '<%= @hashmancustomname %>' + ' @ ' + COMPANY
+STR_PASS_MSG = '<%= @strpassmsg %>'
+COMPANYWEBSITE = '<%= @companywebsite %>'
+
+# message types
+STR_ERR = 'Result: '
+STR_ERR_EXTRA = '. Please double check your password inputs.'
+STR_OK  = 'Success: '
+
+# technical messages
+TECH_OK = 'OK'
+TECH_ERR = 'NOK'
+
+# technical codes
+HTTP_OK = 200
+HTTP_FORB = 403
+HTTP_ERR = 500
+
+# type specific messages
+STR_ERR_AUTH = 'authentication problem'
+STR_ERR_404 = 'Move along, nothing to see here!'
+STR_ERR_403 = 'Move along, nothing to see here!'
+STR_ERR_CATCHALL = 'Oh no... an error page! Why me?'
+STR_ERR_PASS_MISMATCH = 'password confirmation mismatch'
+STR_OK_PWD_CHANGED = 'you can now close this window and proceed to your application.'
+STR_SESSION_EXPIRED = 'Your session is expired. Please login again'
+
+STR_PROG_NAME = 'hashman-web'
+STR_LOG_CHARS = 'login attempt filtered: invalid chars on web input'
+
+# session timers in seconds
+CLIENT_SIDE_TIMEOUT = <%= @client_side_timeout %>
+SERVER_SIDE_TIMEOUT = <%= @server_side_timeout %>
+SESSION_EXPIRATION = <%= @session_expiration %>
+
+# mail related
+
+# the MAIL_FROM constant comes from pp_auth.pp
+STR_SUBJECT_BASE = 'Help request from '
+STR_TEXT_BASE = 'Help request from '
+
+# our authentication command
+PP_AUTH_CMD = LOCALDIR + '/common/pp_auth.py'
+
+# private key for digital signatures
+PRIV_KEY = LOCALDIR + '/ssl/hashman-key.pem'
+PUB_KEY  = LOCALDIR + '/ssl/hashman-pubkey.pem'
+
+# initialize and configure application
+tmpl_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
+app = Flask(__name__, template_folder=tmpl_dir)
+app.secret_key = os.urandom(24)
+
+
+# if name != main, means we are running through Gunicorn
+if __name__ != '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s' )
+    gunicorn_logger = logging.getLogger('gunicorn.error')
+    syslog_handler = logging.handlers.SysLogHandler('/dev/log')
+    gunicorn_logger.addHandler(syslog_handler)
+
+    app.logger.handlers = gunicorn_logger.handlers
+    app.logger.setLevel(gunicorn_logger.level)
+
+
+# we are getting the user IP from the headers
+# as usually there is a proxy in front
+# however it is easy to change this centrally
+def getuserip():
+    return request.headers['X-Real-IP']
+
+
+def create_session(username):
+    session['username'] = username
+    session['last_active'] = datetime.datetime.now()
+
+
+def destroy_session():
+    session.pop('username', None)
+    session.pop('last_active', None)
+
+
+# login screen
+@app.route('/')
+def index():
+    return render_template('index.html', strtitle = TITLE, companywebsite = COMPANYWEBSITE, companyname = COMPANY)
+
+# password change inputs
+@app.route('/next')
+def next():
+    if 'username' in session:
+        # mind that the Common Name may gave special characters
+        # we transform into html entities and need to tag with '|safe' on the template
+        # or else Jinja messes up the & symbol
+        html_cname = encode_to_entity( getcname(session['username']) )
+        return render_template('next.html', strtitle=TITLE, strcname=html_cname, strpassmsg=STR_PASS_MSG, session_timeout=CLIENT_SIDE_TIMEOUT, session_expiration=SESSION_EXPIRATION )
+    else:
+        return render_template('generic-msg.html' , strtitle=TITLE, strtype=STR_ERR, strmsg=STR_ERR_AUTH, strurl='/' )
+
+
+# password change operation
+@app.route('/changepw', methods=['POST'] )
+def changepw():
+    if 'username' in session:
+        username = session['username']
+        oldpassword = request.form['oldpassword']
+        newpassword = request.form['newpassword']
+        newpassword2 = request.form['newpassword2']
+
+        if ( not newpassword == newpassword2 ):
+            return render_template('generic-msg.html' , strtitle=TITLE, strtype=STR_ERR, strmsg=STR_ERR_PASS_MISMATCH, strurl='/next' )
+
+        # we do own own input validation just in case
+        if ( checkstr_pwd( oldpassword ) is False or checkstr_pwd( newpassword ) is False ):
+            return render_template('generic-msg.html', strtitle=TITLE, strtype=STR_ERR, strmsg=STR_ERR_AUTH + STR_ERR_EXTRA, strurl='/next' )
+
+        try:
+            output = subprocess.check_output([ PP_AUTH_CMD, 'setpw', username , oldpassword, newpassword ], stderr=subprocess.STDOUT)
+            logout()
+            return render_template('generic-msg.html', strtitle=TITLE, strtype=STR_OK, strmsg=STR_OK_PWD_CHANGED )
+
+        except CalledProcessError as e:
+            lines = e.output.decode('utf-8').split('\n')
+            for line in lines:
+                if "ERROR" in line:
+                    output = line
+                    break
+            return render_template('generic-msg.html' , strtitle = TITLE, strtype = STR_ERR, strmsg = output + STR_ERR_EXTRA, strurl ='/next' )
+
+    return redirect(url_for('error'))
+
+
+# Route that will process the login
+@app.route('/login', methods=['POST'])
+def login():
+    username = request.form['username']
+    password = request.form['password']
+
+    userip = getuserip()
+
+    # we do own own input validation just in case
+    if ( checkstr_usr( username ) is False or checkstr_pwd( password ) is False ):
+        app.logger.info( STR_PROG_NAME + ': ' + STR_LOG_CHARS + ' for user ' + username + ' from ' + userip )
+        mkdelay( AUTHDELAY_BASE , AUTHDELAY_DELTA )
+        return render_template('generic-msg.html', strtitle=TITLE, strtype=STR_ERR, strmsg=STR_ERR_AUTH, strurl='/' )
+
+    # here we call pp auth which does input validation etc
+    extra_msg = 'from IP ' + userip
+    rc = subprocess.call([ PP_AUTH_CMD , 'extauth', username , password, extra_msg ])
+    if ( rc == 0):
+        create_session(username)
+        return redirect(url_for('next'))
+    else:
+        return render_template('generic-msg.html' , strtitle=TITLE, strtype=STR_ERR, strmsg=STR_ERR_AUTH, strurl='/' )
+
+
+@app.route('/error')
+def error():
+    return render_template('generic-msg.html' , strtitle=TITLE, strtype=STR_ERR, strmsg=STR_ERR_CATCHALL )
+
+
+@app.route('/logout')
+def logout():
+    # remove the username from the session if it's there
+    destroy_session()
+    return redirect(url_for('index'))
+
+
+@app.route('/expired')
+def expire_session():
+    destroy_session()
+    return render_template('generic-msg.html', strtitle=TITLE, strtype=STR_SESSION_EXPIRED, strurl='/')
+
+
+@app.before_request
+def check_session_time():
+    if SESSION_EXPIRATION:
+        if 'username' in session:
+            idle_time = datetime.datetime.now() - session['last_active']
+            if idle_time.seconds > SERVER_SIDE_TIMEOUT:
+                return expire_session()
+            session['last_active'] = datetime.datetime.now()
+
+
+# Route that will process help requests
+@app.route('/reqhelp', methods=['POST'])
+def reqhelp():
+    name = request.form['name']
+    email = request.form['email']
+    go_url = request.form['current_url']
+    text = STR_TEXT_BASE + name + ' with email ' + email + ' sent from ' + request.url_root + ' :\n\n' + request.form['msg']
+    subject = STR_SUBJECT_BASE + name
+    # the encode thing is due to accented chars in the form text
+    reqhelp_email( MAIL_FROM, SUPPORT_TEAM, subject, text.encode('utf-8') )
+    if ( go_url != '/' ) and ( go_url.startswith('/') ):
+        go_url = go_url.strip('/')
+    else:
+        go_url = 'index'
+
+    return redirect( url_for( go_url ) )
+
+
+# interface to test password strength
+#
+# curl -X POST  https://iris.xxxx.yyyy/checkpwd --data "password=TESTPASS"; echo
+@app.route('/checkpwd', methods=['POST'])
+def checkpwd():
+    password = request.form['password']
+    if ( checkstr_pwd( password ) and checkpw(password) ):
+        return TECH_OK , HTTP_OK
+    else:
+        return TECH_ERR , HTTP_OK
+
+
+# interface to sign data
+#
+# curl -X POST  https://iris.xxxx.yyyy/sign --form username=USERNAME --form password=PASSWORD  --form "content=`cat FILENAME|base64`"
+@app.route('/sign', methods=['POST'])
+def sign():
+    password = request.form['password']
+    username = request.form['username']
+    content = request.form['content']
+
+    if ( checkstr_usr( username ) and checkstr_pwd( password ) ):
+        userip = getuserip()
+        extra_msg = 'from IP ' + userip
+        rc = subprocess.call([ PP_AUTH_CMD , 'extauth', username , password, extra_msg ])
+        if ( rc == 0 ):
+            return sign_OpenSSL( base64.b64decode(content) , PRIV_KEY ) , HTTP_OK
+        else:
+            return TECH_ERR , HTTP_FORB
+    else:
+        return TECH_ERR, HTTP_FORB
+
+
+# interface to verify signed data
+#
+# curl -X POST  https://iris.xxxx.yyyy/verify --form username=USERNAME --form password=PASSWORD  --form "content=`cat FILENAME|base64`" --form 'signature=XXXXXXX'
+@app.route('/verify', methods=['POST'])
+def verify():
+    password = request.form['password']
+    username = request.form['username']
+    content = request.form['content']
+    signature = request.form['signature']
+
+    if ( checkstr_usr( username ) and checkstr_pwd( password ) ):
+        userip = getuserip()
+        extra_msg = 'from IP ' + userip
+        rc = subprocess.call([ PP_AUTH_CMD , 'extauth', username , password, extra_msg ])
+        if ( rc == 0 ):
+            return verify_OpenSSL( signature, base64.b64decode(content) , PUB_KEY ) , HTTP_OK
+        else:
+            return TECH_ERR , HTTP_FORB
+    else:
+        return TECH_ERR, HTTP_FORB
+
+
+# generic handling for most common errors
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('generic-msg.html', strtitle=TITLE, strtype=STR_ERR, strmsg=STR_ERR_404), 404
+
+
+# generic handling for most common errors
+@app.errorhandler(403)
+def page_not_found(e):
+    return render_template('generic-msg.html', strtitle=TITLE, strtype=STR_ERR, strmsg=STR_ERR_403), 404
+
+
+if __name__ == '__main__':
+    app.run( host="0.0.0.0", port=8080 )

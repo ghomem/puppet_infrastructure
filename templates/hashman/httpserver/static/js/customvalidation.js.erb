@@ -1,0 +1,188 @@
+// simpler than anything else: 
+// http://keithscode.com/tutorials/javascript/3-a-simple-javascript-password-validator.html
+
+//Set the colors we will be using ...
+var goodColor = "#2199E8";
+var badColor = "#E76861";
+var badBorder = "2px solid" + badColor;
+var goodBorder = "2px solid" + goodColor;
+var whiteBorder = "0px solid" + "#ffffff"
+
+var MINPASSWORDLEN='<%= @minpasswordlen %>'
+var RELAXPASSWORD=<%= @relaxpassword %>
+var STR_PASS_MSG='<%= @strpassmsg %>'
+var UPPERCASE="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+var LOWERCASE="abcdefghijklmnopqrstuvwxyz"
+var LETTERS= UPPERCASE + LOWERCASE
+var NUMBERS="0123456789"
+// also on next.html and pp_auth.py
+var SYMBOLS="!?#$%&*@+-._=;:|/"
+var WHITELIST_PWD = SYMBOLS + NUMBERS + LETTERS
+
+function isEmpty ( obj )
+{
+    if ( obj == null || obj.value == ""  )
+        return true;
+   else
+       return false;
+
+}
+
+// this is intended to prevent mistakes from usersi with normal emails, not to validate exotic emails addresses
+// a lot of fun
+// http://stackoverflow.com/questions/46155/validate-email-address-in-javascript
+
+function isValidEmail(email) {
+    var re = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+    return re.test(email);
+}
+
+// lowlevel strength checkin is encapsulated here
+function isStrong ( strpass )
+{
+
+    // compare to the white list to avoid funky chars
+    var myreg = new RegExp( '[' + WHITELIST_PWD +']', 'g' );
+    var aux = strpass.match(myreg); // could be null
+    if (aux)
+       var matchlen = aux.length;
+    else
+       var matchlen = 0;
+    var passlen = strpass.length;
+    var crit0 = ( matchlen == passlen)
+   
+    // if not all password chars are on the WHITELIST... 
+    if ( !crit0)
+        return false;
+
+    // the 3 criteria described on the text 
+    var crit1 = ( strpass.length >= MINPASSWORDLEN );
+    myreg = new RegExp( '[' + SYMBOLS +']' );
+    var crit2 = myreg.test(strpass); 
+    myreg = new RegExp( '[' + NUMBERS +']' );
+    var crit3 = myreg.test(strpass);
+    var crit4 = false;
+    var crit5 = false;
+
+    if ( RELAXPASSWORD != true )
+    {
+      myreg = new RegExp( '[' + UPPERCASE +']' );
+      crit4 = myreg.test(strpass);
+      myreg = new RegExp( '[' + LOWERCASE +']' );
+      crit5 = myreg.test(strpass);
+    }
+    else
+    {
+      myreg = new RegExp( '[' + LETTERS +']' );
+      crit4 = myreg.test(strpass);
+      crit5 = true;
+    }
+
+    return ( crit1 && crit2 && crit3 && crit4 && crit4 );
+
+}
+
+// checks password strength and provides visual feedback
+function checkStrength (field) {
+  var myPass = document.getElementById(field);
+  
+  var text = '';
+  var extrapassmsg = '';
+  
+  // check if the password is strong
+  if (isStrong(myPass.value)) {
+    text = 'Congratulations! Your new password is secure. Please confirm your new password by typing it on the text field below.';
+    // mark the field as valid
+    myPass.setAttribute('aria-invalid', 'false');
+  } else {
+    text = STR_PASS_MSG;
+    // mark the field as invalid
+    myPass.setAttribute('aria-invalid', 'true');
+  }
+  
+  // show the message
+  var message = document.getElementById('confirmMessage');
+  message.innerHTML = text;
+}
+
+// global check that controls enabled/disabled state of button
+function checkPass (field0, field1, field2) {
+  var oldpass = document.getElementById(field0);
+  var newpass = document.getElementById(field1);
+  var newpass2 = document.getElementById(field2);
+  var message = document.getElementById('confirmMessage');  // get the message element
+
+  // reset the message
+  message.textContent = '';
+  message.style.color = '';
+
+  // check if the passwords match and if they are strong
+  if (newpass.value === newpass2.value && isStrong(newpass.value) && !isEmpty(oldpass)) {
+    // enable the button
+    document.getElementById('passbutton').disabled = false;
+    // mark the fields as valid
+    newpass.setAttribute('aria-invalid', 'false');
+    newpass2.setAttribute('aria-invalid', 'false');
+    message.textContent = 'Congratulations! Your new password is secure.';
+    message.style.color = 'green';
+  } else {
+    // disable the button
+    document.getElementById('passbutton').disabled = true;
+    // mark the fields as invalid
+    newpass.setAttribute('aria-invalid', 'true');
+    newpass2.setAttribute('aria-invalid', 'true');
+
+    if (isEmpty(oldpass)) {
+      message.textContent = 'Old password missing!';
+    } else if (isEmpty(newpass)) {
+      message.textContent = 'New password field is empty.';
+    } else if (!isStrong(newpass.value)) {
+      message.textContent = STR_PASS_MSG;
+    } else if (isEmpty(newpass2)) {
+      message.textContent = 'Confirm password field is empty.';
+    } else if (newpass.value !== newpass2.value) {
+      message.textContent = 'Passwords do not match.';
+    }
+    message.style.color = 'red';
+  }
+}
+
+function whitenBorder ( border )
+{
+    var passborder = document.getElementById(border)
+    passborder.style.border = whiteBorder;
+}
+
+
+function checkHelpFields ( namefield , emailfield , msgfield , buttonid )
+{
+
+   var nameobj = document.getElementById(namefield);
+   var emailobj = document.getElementById(emailfield);
+   var msgobj = document.getElementById(msgfield);
+   var button = document.getElementById(buttonid);
+   var status = ( !isEmpty(nameobj) && isValidEmail(emailobj.value) && !isEmpty(msgobj) );
+
+   if ( status == true )
+       button.disabled = false;
+   else
+       button.disabled = true;
+
+   return ( status );
+}
+
+
+function checkLoginFields( usernamefield, passwordfield, buttonid )
+{
+  var usernameobj = document.getElementById(usernamefield);
+  var passwordobj = document.getElementById(passwordfield);
+  var button = document.getElementById(buttonid);
+  var status = ( !isEmpty(usernameobj) && !isEmpty(passwordobj) );
+
+  if ( status == true )
+    button.disabled = false;
+  else
+    button.disabled = true;
+
+  return ( status );
+}

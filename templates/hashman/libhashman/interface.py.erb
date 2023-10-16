@@ -1,0 +1,461 @@
+import os
+import logging
+import random
+import sys
+import signal
+import time
+import crypt
+import hashlib
+import binascii
+import base64
+import json
+import glob
+from random import randint
+from prettytable import PrettyTable
+from libhashman.config import *
+from libhashman.miscutils import *
+from libhashman.dbutils import *
+from libhashman.mailutils import *
+
+
+def listusers():
+    logging.debug( sys._getframe().f_code.co_name )
+
+    userlist = enumusers()
+
+    if ( userlist is None ):
+        return E_ERR
+
+    # Define table and its columns
+    table = PrettyTable()
+    table.field_names = ['username', 'ecryptfs', 'sshkey', 'locked', 'expired', 'email', 'common name', 'company']
+
+    for username in userlist:
+        email = getemail(username)
+        cname = getcname(username)
+        company = getcompany(username)
+        ecryptfs = ' '
+        sshkey   = ' '
+        locked   = ' '
+        expired  = ' '
+        if ( getppsigs(username) != '' ):
+            ecryptfs = 'X'
+        if ( getpubkey(username) != '' ):
+            sshkey = 'X'
+        if ( is_locked(username) ):
+            locked = 'X'
+        if ( is_expired(username) ):
+            expired = 'X'
+
+        # Add rows to table
+        table.add_row([username, ecryptfs, sshkey, locked, expired, email, cname, company])
+
+    print(table)
+    return E_OK
+
+
+def notify( email, name , username , password, msgbody, url_to_show=HASHMAN_URL ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # if TESTENV == True:
+    #     return
+
+    if (url_to_show != HASHMAN_URL):
+        button_text = SENDMAIL_BUTTONTEXT
+    else:
+        button_text = HASHMAN_BUTTONTEXT
+
+    emails = []
+    emails.insert(0, email)
+    body = msgbody
+    html_password = html_customize_text( password , GRAY_COLOR )
+    html_username = html_customize_text( username , GRAY_COLOR )
+    body = body.replace( '{{ DUMMYPASSWORD }}' , html_password )
+    body = body.replace( '{{ DUMMYUSERNAME }}' , html_username )
+    html = html_from_template( EMAIL_TEMPLATE, MAIN_COLOR, LIGHT_COLOR, RED_COLOR, GRAY_COLOR,  BG_COLOR, OUTERWIDTH + EXTRA_WIDTH, INNERWIDTH + EXTRA_WIDTH, INNERWIDTH2 + EXTRA_WIDTH, PADDING, FILEHEIGHT, FILEWIDTH, PADDING_MSO)
+    xsendmail_html( emails, EMAIL_SUBJECT, body, MAIL_FROM,  "", "", name, html, url_to_show, MAIN_COMPANY, button_text)
+
+
+def useradd( username, password, email, name, company, lockuser=True, mailnotif=True, confirm_mail="" ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # first thing is input validation
+    if ( checkstr_usr( username ) is False ):
+        logging.error('error validating username ' + username)
+        return E_ERR
+
+    if ( not is_email( email ) ):
+        logging.error('error validating email ' + email)
+        return E_ERR
+
+    if ( not is_cname( name ) ):
+        logging.error('error validating common name ' + name)
+        return E_ERR
+
+    pwentry = getpw( username )
+    if ( pwentry is not None ):
+        logging.error('user ' + username + ' already exists')
+        return E_ERR
+    if ( confirm_mail != ""   ):
+        url_to_show = SENDMAIL_URL + confirm_mail + CONFIRM_MAIL_CONTENT
+    else:
+        url_to_show = HASHMAN_URL
+    saltstr  = mksalt()
+    ourentry = crypt.crypt( password , '$' + SALTTYPE + '$' + saltstr + '$')
+
+    samba_hash = generatesmbhash( password )
+
+    try:
+        signals_handle( False )
+        addent( username, ourentry,   DBFILE_USER,      SUFFIX_USER )
+        addent( username, email,      DBFILE_EMAIL,     SUFFIX_EMAIL )
+        addent( username, name,       DBFILE_CNAME,     SUFFIX_CNAME )
+        addent( username, company,    DBFILE_COMPANY,   SUFFIX_COMPANY )
+        addent( username, samba_hash, DBFILE_SMB,       SUFFIX_SMB )
+
+        # these are empty by default
+        addent( username, '',       DBFILE_PPSIGS,    SUFFIX_PPSIGS )
+        addent( username, '',       DBFILE_PPWRAPPED, SUFFIX_PPWRAPPED )
+        addent( username, '',       DBFILE_KEY,       SUFFIX_KEY )
+
+        expirepw( username )
+        if ( lockuser is True ):
+            lockpw( username )
+        signals_handle( True )
+
+        logging.info('user ' + username + ' created with initial password ' + password)
+
+        if ( mailnotif is True ):
+            notify( email, name, username, password, BODY_TEXT_USERADD, url_to_show )
+
+        return E_OK
+
+    except Exception as exception:
+        logging.error('validations passed but user creation failed')
+        logging.debug(str(exception))
+        return E_ERR
+
+
+def useradd_import( username_cli, json_b64_userdata ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    try:
+        json_userdata = base64.b64decode(json_b64_userdata)
+        userdata = json.loads(json_userdata)
+        username = userdata[0][1]
+
+        if ( username != username_cli ):
+            logging.error('command line given username differs from username from userdata')
+            return E_ERR
+
+        company   = userdata[1][1]
+        email     = userdata[2][1]
+        pwentry   = userdata[3][1]
+        name      = userdata[4][1]
+        uname     = name
+        ppsigs    = userdata[5][1]
+        ppwrapped = userdata[6][1]
+        smbhash   = userdata[7][1]
+        pubkey    = userdata[8][1]
+
+        # without user notifcation and with a random password for useradd
+        password = mkpasswd(PASSWORDLEN)
+        rc = useradd( username, password, email , uname , company, True, False )
+
+        # this would cause a rollback
+        if ( rc != E_OK ):
+            logging.info('problem calling useradd from imported user data')
+            return E_ERR
+
+        if ( ppsigs != '' and ppwrapped != '' ):
+            setecryptfs( username, ppsigs, ppwrapped )
+
+        # now we set the real password entry the the setpw raw parameter
+        setpw( username, pwentry, True, '', smbhash )
+        logging.info('existing password imported for user ' + username)
+
+        # set the public SSH key of the user
+        setpubkey( username, pubkey )
+
+        # and lock the user by default
+        lockpw( username, True )
+        logging.info('user entry locked for user ' + username)
+
+        return E_OK
+
+    except Exception as exception:
+        print(str(exception))
+        logging.error('problem processing input')
+        logging.debug(str(exception))
+        return E_ERR
+
+
+def userdel( username ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # first thing is input validation
+    if ( checkstr_usr( username ) is False ):
+        return E_ERR
+
+    linenr = getpw( username, True )
+    if ( linenr is None or linenr == -1 ):
+        logging.debug('user ' + username + ' not found')
+        return E_ERR
+
+    try:
+        signals_handle( False )
+        delent( username, DBFILE_USER,      SUFFIX_USER )
+        delent( username, DBFILE_EMAIL,     SUFFIX_EMAIL )
+        delent( username, DBFILE_CNAME,     SUFFIX_CNAME )
+        delent( username, DBFILE_COMPANY,   SUFFIX_COMPANY )
+        delent( username, DBFILE_KEY,       SUFFIX_KEY )
+        delent( username, DBFILE_PPSIGS,    SUFFIX_PPSIGS )
+        delent( username, DBFILE_PPWRAPPED, SUFFIX_PPWRAPPED )
+        delent( username, DBFILE_SMB,       SUFFIX_SMB)
+        signals_handle( True )
+
+        return E_OK
+
+    except Exception as exception:
+        logging.debug(str(exception))
+        return E_ERR
+
+    return E_ERR
+
+
+# mark password as expired
+def expirepw( username ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # first  thing is input validation
+    if ( checkstr_usr( username ) is False ):
+        return E_ERR
+
+    try:
+        pwentry = getpw( username )
+        if ( pwentry is None ):
+            logging.debug('user ' + username + ' not found')
+            return E_ERR
+        position = pwentry.index('$')
+        smbhashentry = getsmbhash( username )
+        if ( smbhashentry is None ):
+            logging.debug('user ' + username + ' Samba hash not found, no action taken')
+
+    except Exception as exception:
+        logging.debug(str(exception))
+        return E_ERR
+
+    # we need to look up after the first $, that could be prefixed by a ! or not
+    if ( pwentry[position + 1:].startswith( EXPIREPREFIX ) ):
+        logging.debug('password for user ' + username + ' already expired')
+        return E_ERR
+
+    # we insert the expiration mark
+    newentry = pwentry[:position + 1] + EXPIREPREFIX + pwentry[position + 1:]
+    # set the lockness of the Samba hash
+    expiredsmbhash = mk_smb_lockness( username, newentry)
+
+    return setpw( username , newentry, True, '', expiredsmbhash )
+
+
+# remove expiration mark
+def unexpirepw( username ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # first  thing is input validation
+    if ( checkstr_usr( username ) is False ):
+        return E_ERR
+
+    try:
+        pwentry = getpw( username )
+        if ( pwentry is None ):
+            logging.debug('user ' + username + ' not found')
+            return E_ERR
+
+        smbhashentry = getsmbhash( username )
+        if ( smbhashentry is None ):
+            logging.debug('user ' + username + ' Samba hash not found, no action taken')
+
+    except Exception as exception:
+        logging.debug(str(exception))
+        return E_ERR
+
+    if ( not is_pwexpired( pwentry ) ):
+        logging.debug('password for user ' + username + ' not expired')
+        return E_ERR
+
+    # we remove the expiration mark
+    position = pwentry.index('$')
+    newentry = pwentry[:position + 1] + pwentry[position + 2:]
+    # set the lockness of the Samba hash
+    newsmbhash = mk_smb_lockness( username, newentry )
+
+    return setpw( username , newentry, True, '', newsmbhash )
+
+
+def listplugins(type, fnameonly=False):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    mydir = PLUGIN_DIR + '/' + str(type)
+    pattern = mydir + '/*.sh'
+    pattern2 = mydir + '/*.py'
+
+    mylist = glob.glob(pattern) + glob.glob(pattern2)
+    if ( fnameonly is not True ):
+        return mylist
+    else:
+        fnames = []
+        for f in mylist:
+            fnames.append(os.path.basename(f))
+        return fnames
+
+
+# prints basic info and helper information related to role assignement
+def mk_info( username, company ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # we already have the company
+    email = getemail(username)
+    cname = getcname(username)
+
+    print('')
+    print('Basic user information:')
+    print('')
+    print('  username: ' + username)
+    print('  email   : ' + email)
+    print('  name    : ' + cname)
+    print('  company : ' + company)
+    print('')
+    print('Information for role assignement:')
+
+    # for regular linux users
+    str_base    = '  puppet_infrastructure::user        { \''
+    str_sudoer  = '  puppet_infrastructure::user_sudoer { \''
+
+    str_extra  = username + '\': '
+    str_extra += 'myname => $::' + username + SUFFIX_CNAME + ', '
+    str_extra += 'myhash => $::' + username + SUFFIX_USER + ', '
+    str_extra += 'mykey  => $::' + username + SUFFIX_KEY + ', '
+    str_extra += ' }'
+
+    strout_base   = str_base   + str_extra
+    strout_sudoer = str_sudoer + str_extra
+
+    print('')
+    print('  Regular linux user:')
+    print('')
+    print(strout_base)
+    print(strout_sudoer)
+    print('')
+
+    # for linux desktop users with encrypted home directories
+    str_base    = '  puppet_infrastructure::user_desktop        { \''
+    str_sudoer  = '  puppet_infrastructure::user_desktop_sudoer { \''
+
+    str_extra  = username + '\': '
+    str_extra += 'myname => $::' + username + SUFFIX_CNAME + ', '
+    str_extra += 'myhash => $::' + username + SUFFIX_USER + ', '
+    str_extra += 'ignorekey => true' + ', '
+    str_extra += 'myppsigs => $::' + username + SUFFIX_PPSIGS + ', '
+    str_extra += 'myppwrapped => $::' + username + SUFFIX_PPWRAPPED + ', '
+    str_extra += ' }'
+
+    strout_base   = str_base   + str_extra
+    strout_sudoer = str_sudoer + str_extra
+
+    print('  Linux desktop user with encrypted home directory:')
+    print('')
+    print(strout_base)
+    print(strout_sudoer)
+    print('')
+
+
+# prints users public key
+def mk_pubkey( username, company ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    pubkey = getpubkey(username)
+
+    print('')
+    print(username + '\'s public key:')
+    print('')
+    print(pubkey)
+    print('')
+
+
+# prints basic info and helper information related to role assignement
+def mk_info_export( username, automation=False ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    company = getcompany(username)
+    email = getemail(username)
+    pwentry  = getpw(username)
+    smbentry = getsmbhash(username)
+    cname = getcname(username)
+    pubkey = getpubkey(username)
+    ppsigs = getppsigs(username)
+    ppwrapped = getppwrapped(username)
+
+    userdata = [ [ 'username', username   ],
+                 [ 'company' , company    ],
+                 [ 'email', email         ],
+                 [ 'pwentry', pwentry     ],
+                 [ 'cname', cname         ],
+                 [ 'ppsigs', ppsigs       ],
+                 [ 'ppwrapped', ppwrapped ],
+                 [ 'smbentry', smbentry   ],
+                 [ 'pubkey', pubkey       ] ]
+
+    # the only difference we get by using json.dump uses double quotes
+    # but OK, let's respect data interchange standards
+    json_userdata = json.dumps(userdata)
+
+    # encode as base64 for copy paste friendliness
+    # allow automated version for unit tests and possible integration with other tools
+
+    b64_json_userdata = base64.b64encode( json_userdata.encode() ).decode()
+    if ( automation ):
+        print(b64_json_userdata)
+    else:
+        print('')
+        print('Export data for username:' , username)
+        print('')
+        print(b64_json_userdata)
+        print('')
+        print('To import this user on another system simply run:')
+        print('')
+        print('sudo <%= @localdir %>/hashman/common/pp_auth.py import ' + username + ' ' + b64_json_userdata)
+        print('')
+
+    return E_OK
+
+
+# command line invocation summary
+def print_usage():
+    basename = os.path.basename(sys.argv[0])
+    print('Usage: ' + basename + ' auth          USER PASSWORD')
+    print('       ' + basename + ' extauth       USER PASSWORD')
+    print('       ' + basename + ' setpw         USER PASSWORD NEWPASSWORD')
+    print('       ' + basename + ' setpwint      USER')
+    print('       ' + basename + ' setecryptfs   USER PPSIGS PPWRAPPED')
+    print('       ' + basename + ' setpubkey     USER PUBKEY')
+    print('       ' + basename + ' unsetpubkey   USER')
+    print('       ' + basename + ' unsetecryptfs USER')
+    print('       ' + basename + ' setemail      USER EMAIL')
+    print('       ' + basename + ' setcompany    USER COMPANY')
+    print('       ' + basename + ' setcname      USER COMMONNAME')
+    print('       ' + basename + ' lock          USER [IGNORESTATUS]')
+    print('       ' + basename + ' unlock        USER REASON')
+    print('       ' + basename + ' useradd       USER EMAIL NAME COMPANY [CONFIRMATIONEMAIL | SILENT]')
+    print('       ' + basename + ' expire        USER')
+    print('       ' + basename + ' unexpire      USER')
+    print('       ' + basename + ' inform        USER')
+    print('       ' + basename + ' reset         USER [OLDPASSWORD]')
+    print('       ' + basename + ' testemail     USER')
+    print('       ' + basename + ' printinfo     USER')
+    print('       ' + basename + ' printpubkey   USER')
+    print('       ' + basename + ' export        USER')
+    print('       ' + basename + ' import        USER USERDATA')
+    print('       ' + basename + ' listusers')
+    print('       ' + basename + ' listplugins')
+    exit(E_ERR)

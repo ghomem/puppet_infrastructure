@@ -1,0 +1,26 @@
+# make gtls driver the default
+$DefaultNetstreamDriver gtls
+
+# certificate files
+$DefaultNetstreamDriverCAFile /etc/ssl/logstash-ca.pem
+$DefaultNetstreamDriverCertFile /etc/ssl/logstash-client-cert.pem
+$DefaultNetstreamDriverKeyFile /etc/ssl/logstash-client-key.pem
+
+# # set up the action
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+$ActionSendStreamDriverAuthMode x509/name
+$ActionSendStreamDriverPermittedPeer <%=@elk_server%>
+$ActionSendStreamDriverMode 1 # run driver in TLS-only mode
+
+*.*                       @@<%=@elk_server%>:1514
+<% if @use_rsyslog_failover == true %>
+# # set up the failover action
+$ActionExecOnlyWhenPreviousIsSuspended on
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+$ActionSendStreamDriverAuthMode x509/name
+$ActionSendStreamDriverPermittedPeer <%=@elk_server_failover%>
+$ActionSendStreamDriverMode 1 # run driver in TLS-only mode
+
+*.*                       @@<%=@elk_server_failover%>:1514
+$ActionExecOnlyWhenPreviousIsSuspended off
+<% end %>

@@ -1,0 +1,5 @@
+# Contains which users can use each MAIL FROM addresses
+# MAIL FROM                 Allowed users (SASL login names, comma separated)
+<% scope['puppet_infrastructure::postfix_smtp_base::allowed_users_per_mail_from_address'].each do |hash| -%>
+<%=hash['mail_from_address']%> <%=hash['allowed_users'].join(',')%>
+<% end -%>

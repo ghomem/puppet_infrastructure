@@ -1,0 +1,101 @@
+#!/bin/sh
+
+set -e # we set this so the script ends after any failed command
+       # please note that even if we have any failed command, the clean up
+       # function is going to be called anyway
+
+# function to clean up temporary files/dirs
+cleanup() {
+  # Clean up the temporary directory
+  rm -rf $TEMPDIR
+  # Remove lock file
+  rm -f $LOCKFILE
+}
+
+E_OK=0
+E_ERR=1
+LOCKFILE="/var/lock/apt-check-updates.lock"
+PKGSFILE="<%= @update_cache_dir %>/list"
+GET_RELEVANT_UPDATES_LIST="<%= @localdir %>/bin/get-relevant-updates-list"
+SILENT="<%= @check_apt_silent %>"
+DEBUG="<%= @check_apt_debug %>"
+PRIO_THRESHOLD=$1
+DEFAULT_PRIO="<%= @default_prio %>"
+NO_KERNEL="<%= @apt_check_updates_no_kernel %>"
+
+# function to print correct usage
+print_usage () {
+  echo "usage: apt-check-updates.sh PRIOTHRESHOLD"
+  echo "PRIOTHRESHOLD = {Critical,High,Medium,Low,Negligible}"
+  exit $E_ERR
+}
+
+# validate parameter
+if [ -z "$1" ]; then
+  print_usage
+fi
+
+# validate the priority string
+PRIO_THRESHOLD_LOWER=`echo $PRIO_THRESHOLD | tr '[:upper:]' '[:lower:]'`
+case $PRIO_THRESHOLD_LOWER in
+negligible|low|medium|high|critical)
+  ;;
+*)
+  print_usage
+esac
+
+# exit in case the lockfile exists
+if [ -f $LOCKFILE ]; then
+   echo "lock file exists: $LOCKFILE"
+   exit $E_ERR
+else
+   touch $LOCKFILE
+fi
+
+# clean up when this script ends
+# please note that this trap call needs to be done after the "touch $LOCKFILE",
+# otherwise we might be removing the lockfile created by a previous execution of
+# this script
+trap cleanup EXIT KILL
+
+RELEASE=`lsb_release -cs`
+OVAL_XML_FILE="com.ubuntu.${RELEASE}.usn.oval.xml"
+
+# Create temporary directory
+TEMPDIR=`mktemp -d`
+
+# Check if we want to execute in silent mode
+if [ $SILENT -eq 1 ]; then
+  QUIET='-q'
+  OSCAP_EVAL_REDIRECT='> /dev/null'
+else
+  QUIET=''
+  OSCAP_EVAL_REDIRECT=''
+fi
+
+# Check if we want extra debug output
+if [ $DEBUG -eq 1 ]; then
+  DEBUG_OPT='-d'
+else
+  DEBUG_OPT=''
+fi
+
+# Enter the temporary directory, download and evaluate the OVAL file
+cd $TEMPDIR
+wget ${QUIET} https://security-metadata.canonical.com/oval/${OVAL_XML_FILE}.bz2
+bunzip2 ${OVAL_XML_FILE}.bz2
+eval oscap oval eval --results results.xccdf ${OVAL_XML_FILE} ${OSCAP_EVAL_REDIRECT}
+
+# Check if we want kernel updates or not
+if [ $NO_KERNEL -eq 1 ]; then
+  NO_KERNEL_OPT='--no-kernel'
+else
+  NO_KERNEL_OPT=''
+fi
+
+# Get the relevant updates list
+COMMAND="$GET_RELEVANT_UPDATES_LIST ${QUIET} ${DEBUG_OPT} -if results.xccdf -of ${PKGSFILE} -pt ${PRIO_THRESHOLD} -dp ${DEFAULT_PRIO} ${NO_KERNEL_OPT}"
+if [ $DEBUG -eq 1 ]; then
+  echo $COMMAND
+fi
+$COMMAND

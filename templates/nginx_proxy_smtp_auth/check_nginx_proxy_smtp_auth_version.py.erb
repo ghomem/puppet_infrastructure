@@ -1,0 +1,111 @@
+#!/usr/bin/python3
+
+# vim: expandtab ts=4
+
+import apt_pkg
+from launchpadlib.launchpad import Launchpad
+from debian.debian_support import Version
+import argparse
+import sys
+
+PACKAGE_NAME = "<%= @nginx_package_name %>"
+UBUNTU_DIST = "<%= @ubuntu_dist %>"
+UBUNTU_ARCH = "<%= @ubuntu_arch %>"
+
+def get_local_ver_str(package_name):
+    """This function gets the locally installed version of the given package."""
+
+    # Initialize apt_pkg
+    apt_pkg.init_config()
+    apt_pkg.init_system()
+
+    # Get cache objects
+    my_apt_cache = apt_pkg.Cache(None)
+    my_apt_dep_cache = apt_pkg.DepCache(my_apt_cache)
+
+    # Get the version string and return it
+    pkg_version_str = my_apt_cache[package_name].current_ver.ver_str
+    return pkg_version_str
+
+
+def get_lp_ver_str(package_name, ubuntu_dist, arch):
+    """This funtion gets the version of the package available in Launchpad"""
+
+    # Build the Launchpad objects
+    lp_object = Launchpad.login_anonymously("https://solidangle.eu/", "production")
+    ubuntu = lp_object.distributions["ubuntu"]
+    lp_series = ubuntu.getSeries(name_or_version=ubuntu_dist)
+    archive = ubuntu.main_archive
+    lp_distroarchseries = lp_series.getDistroArchSeries(archtag=arch)
+
+    # Get the list of binaries published for the specific package
+    binaries = archive.getPublishedBinaries(distro_arch_series=lp_distroarchseries,
+                                            exact_match=True,
+                                            status="Published",
+                                            pocket="Security",
+                                            binary_name=package_name)
+
+    # Get the package version from the security pocket, if that doesn't work,
+    # fall back to the release pocket
+    try:
+    	pkg_version_str = binaries[0].binary_package_version
+    except IndexError:
+        # Get the list of binaries published for the specific package
+    	binaries = archive.getPublishedBinaries(distro_arch_series=lp_distroarchseries,
+                                                exact_match=True,
+                                                status="Published",
+                                                pocket="Release",
+                                                binary_name=package_name)
+    	pkg_version_str = binaries[0].binary_package_version
+
+    # Return result
+    return pkg_version_str
+
+
+def main():
+    """Main function."""
+
+    # Argument parser
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.description = ("Program meant to test the nginx package version.")
+    arg_parser.add_argument("-n", "--nagios-output",
+                            help="Print output compatible with nagios.",
+                            required=False,
+                            action='store_true',
+                            default=False)
+
+    # Parse arguments
+    args = arg_parser.parse_args()
+
+    # Detect nagios mode
+    nagios_output = args.nagios_output
+
+    # Print the locally installed version
+    pkg_local_version_str = get_local_ver_str(PACKAGE_NAME)
+    if not nagios_output:
+    	print("Local version: %s" % pkg_local_version_str)
+
+    # Print available version in Launchpad
+    pkg_lp_version_str = get_lp_ver_str(PACKAGE_NAME, UBUNTU_DIST, UBUNTU_ARCH)
+    if not nagios_output:
+    	print("Launchpad version: %s" % pkg_lp_version_str)
+
+    # Build the local and expected versions objects
+    pkg_local_version = Version(pkg_local_version_str)
+    pkg_expected_version = Version(pkg_lp_version_str + '~ubuntu20.04~ppa1')
+    if not nagios_output:
+    	print("Expected version: %s" % pkg_expected_version)
+
+    # Compare the local and expected version
+    if pkg_expected_version == pkg_local_version:
+        print("OK: The package %s is at the expected version (%s)"
+              % (PACKAGE_NAME, pkg_expected_version))
+        sys.exit(0)
+    else:
+        print("Warning: The %s package needs to be updated to %s"
+              % (PACKAGE_NAME, pkg_expected_version))
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

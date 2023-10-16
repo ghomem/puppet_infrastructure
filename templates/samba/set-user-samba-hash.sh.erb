@@ -1,0 +1,20 @@
+#!/bin/bash
+
+FIRST_NAME=$1
+LAST_NAME=$2
+SAMBA_HASH=$3
+
+DOMAIN="<%= @domain %>"
+TLD="<%= @tld %>"
+
+if [ "$#" -ne 3 ]; then
+    script_name=`basename "$0"`
+    echo "Usage: ${script_name} FIRST_NAME LAST_NAME SAMBA_HASH"
+    exit 1
+fi
+
+echo "dn: CN=${FIRST_NAME} ${LAST_NAME},CN=Users,DC=${DOMAIN},DC=${TLD}
+changetype: modify
+replace: unicodePwd
+unicodePwd:: ${SAMBA_HASH}
+" | ldbmodify -H /var/lib/samba/private/sam.ldb  --controls=local_oid:1.3.6.1.4.1.7165.4.3.12:0

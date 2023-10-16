@@ -1,0 +1,20 @@
+main_collective = mcollective
+collectives = mcollective
+libdir = /opt/puppetlabs/mcollective/plugins
+logger_type = syslog
+loglevel = warn
+
+# Plugins
+securityprovider = psk
+plugin.psk = unset
+
+direct_addressing = 1
+connector = rabbitmq
+plugin.rabbitmq.vhost = /
+plugin.rabbitmq.pool.size = 1
+plugin.rabbitmq.pool.1.host = <%= @mcomaster %>
+plugin.rabbitmq.pool.1.port = <%= @mcoport %>
+plugin.rabbitmq.pool.1.user = <%= @mcouser %>
+plugin.rabbitmq.pool.1.password = <%= @mcopass %>
+plugin.rabbitmq.pool.1.ssl = 1
+plugin.rabbitmq.pool.1.ssl.fallback = 1

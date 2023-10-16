@@ -1,0 +1,158 @@
+import sys
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.header import Header
+import html.entities
+import logging
+from libhashman.config import *
+
+
+# wrapper function to send email easily - WARNING: currently not in use
+def xsendmail(email , subject, textfile, username, password, url):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # Open a plain file for reading. Suppose it is utf-8.
+    fp = open(textfile, 'rb')
+    # Create a text/plain message
+    msg = MIMEText(fp.read(), _charset='utf-8')
+    fp.close()
+
+    # here are we filling the headers
+    msg['Subject'] = subject
+    msg['From'] = MAIL_FROM
+    msg['To'] = email
+
+    msg_str = msg.as_string()
+    new_str = msg_str.replace( 'DUMMYUSER' , username )
+    new_str = new_str.replace( 'DUMMYPASSWORD' , password )
+    new_str = new_str.replace( 'DUMMYURL' , url )
+
+    # Send the message via our own SMTP server, but don't include the
+    # envelope header.
+    s = smtplib.SMTP('127.0.0.1')
+    rcpts = [ email ] + SUPPORT_TEAM
+    s.sendmail(MAIL_FROM, rcpts , new_str)
+    s.quit()
+
+
+# wrapper function to send email easily
+def xsendmail_html(emails, subject, body, sender, customername, servicename, receivername, html, url, company='', button_text=HASHMAN_BUTTONTEXT):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # convert Common Name from UTF-8 to HTML entities
+    html_receiver = encode_to_entity( receivername )
+    new_str = html.replace( '{{ RECEIVER }}' , html_receiver )
+    new_str = new_str.replace( '{{ SERVICE }}' ,  servicename )
+    new_str = new_str.replace( '{{ TEXT }}' , body )
+    new_str = new_str.replace( '{{ URL }}' ,  url )
+    new_str = new_str.replace( '{{ LOGO }}' , HASHMAN_URL)
+    new_str = new_str.replace( '{{ COMPANY }}' ,  company )
+    new_str = new_str.replace( '{{ BUTTONTEXT }}' , button_text)
+
+    # Create a Multipart message
+    msg = MIMEMultipart('alternative')
+    text = 'Please activate HTML support'
+
+    # Record the MIME types of both parts - text/plain and text/html.
+    part1 = MIMEText(text, 'plain', _charset='utf-8')
+    part2 = MIMEText(new_str, 'html', _charset='utf-8')
+    msg.attach(part1)
+    msg.attach(part2)
+    # NOTE: if we ever need special characters in the subject see below...
+    msg['Subject'] = subject
+    msg['From'] = sender
+    if("mailto" in url):
+        msg['Reply-To'] = url.split(":")[1].split("?")[0]
+
+    s = smtplib.SMTP('127.0.0.1')
+
+    # iterate on the list of reciptients
+    for i in range( len(emails) ):
+        email = emails[i]
+        # this horrible operation is to encode the common name while leaving the email address alone
+        # https://gist.github.com/ymirpl/1052094#file-gistfile1-py-L27
+        to_header = "\"%s\" %s" % ( Header(receivername, 'utf-8'), ' <' + email + '>' )
+        msg['To'] = to_header
+
+        msg_str = msg.as_string()
+        rcpts = [ email ] + SUPPORT_TEAM
+        s.sendmail( sender , rcpts , msg_str)
+
+    s.quit()
+
+
+# convert hex 6 digit number to RGB declaration in CSS format
+def hex_to_rgb(hex_string):
+    rgb_tuple = tuple(int(hex_string[i : i + 2], 16) for i in (0, 2, 4))
+    return "rgb{}".format(rgb_tuple)
+
+
+def html_customize_text( text, hexcolor, textsize=14 ):
+
+    prefix = '<span style="color: {{ RGB_COLOR }}; font-size: {{ TEXT_SIZE }}px; font-family: \'proxima_nova_rgregular\', Helvetica; font-weight: normal;">'
+    suffix = '</span>'
+
+    prefix = prefix.replace('{{ RGB_COLOR }}' , hex_to_rgb(hexcolor) )
+    prefix = prefix.replace('{{ TEXT_SIZE }}' , str(textsize) )
+    html = prefix + text + suffix
+
+    return html
+
+
+# wrapper function for HTML email, extracted untouched from the asgard platform notifier
+def html_from_template( template , hexcolor , hexlight, hexred, hexgray, hexbg, outerw, innerw, innerw2, padding, fileheight, filewidth, padding_mso=0 ):
+
+    # Open HTML file
+    fp = open(template, 'rb')
+    new_str = fp.read().decode('utf-8')
+    fp.close()
+
+    # Helper HTML file with repeatable items
+    fp = open(template + '.item', 'rb')
+    extra_str = fp.read().decode('utf-8')
+    fp.close()
+
+    # fixed delta
+    filefontsize = fileheight - 13
+    extra_str = extra_str.replace( '{{ FILEHEIGHT }}', str(fileheight) )
+    extra_str = extra_str.replace( '{{ FILEWIDTH }}',  str(filewidth) )
+    extra_str = extra_str.replace( '{{ FILEFONTSIZE }}', str(filefontsize) )
+
+    # Helper title string - if we want to prefix each type of list with a title
+    item_str = '<!--[if !mso]><!--><span style="font-family: \'proxima_nova_rgregular\', Helvetica; font-weight: normal;"><!--<![endif]-->{{ FSTATUS }}<!--[if !mso]><!--></span><!--<![endif]--><br/>\n'
+
+    # normal substitution for the rest of the file
+    new_str = new_str.replace( '{{ HEX_COLOR }}' , '#' + hexcolor )
+    new_str = new_str.replace( '{{ RGB_COLOR }}' , hex_to_rgb(hexcolor) )
+    new_str = new_str.replace( '{{ LIGHT_HEX_COLOR }}' , '#' + hexlight  )
+    new_str = new_str.replace( '{{ LIGHT_RGB_COLOR }}' , hex_to_rgb(hexlight) )
+    new_str = new_str.replace( '{{ BG_HEX_COLOR }}' , '#' + hexbg )
+    new_str = new_str.replace( '{{ BG_RGB_COLOR }}' , hex_to_rgb(hexbg) )
+    new_str = new_str.replace( '{{ OUTERWIDTH }}' , str(outerw) )
+    new_str = new_str.replace( '{{ INNERWIDTH }}' , str(innerw) )
+    new_str = new_str.replace( '{{ INNERWIDTH2 }}' , str(innerw2) )
+    new_str = new_str.replace( '{{ PADDING }}' , str(padding) )
+    new_str = new_str.replace( '{{ PADDING_MSO_BUG }}' , str(padding_mso) )
+    new_str = new_str.replace( '{{ FILEHEIGHT }}' , str(fileheight) )
+    new_str = new_str.replace( '{{ FILEWIDTH }}' ,  str(filewidth)  )
+    new_str = new_str.replace( '{{ TEXT_UNDER_LOGO }}' , '' )
+
+    # for the good news / bad news text, if any
+    new_str = new_str.replace( '{{ BAD_NEWS_RGB_COLOR }}' ,  hex_to_rgb(hexred) )
+    new_str = new_str.replace( '{{ GOOD_NEWS_RGB_COLOR }}' , hex_to_rgb(hexcolor) )
+
+    return new_str
+
+
+# converts a unicode string to html entities
+def encode_to_entity(s):
+    t = ""
+    for i in s:
+        if ord(i) in html.entities.codepoint2name:
+            name = html.entities.codepoint2name.get(ord(i))
+            t += "&" + name + ";"
+        else:
+            t += i
+
+    return t

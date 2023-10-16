@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# this script iterates over $HOSTS and syncs the contents of each host's $REMOTEDIR
+# into $LOCALDIR/$HOST by means of rsync over ssh, assuming previous key exchange
+# between the local user that runs the script and $REMOTEUSER
+
+# the most important input, ports are mandatory
+
+HOSTS="<%= @hostlist %>"
+
+# script parameters
+
+REMOTEUSER="<%= @remoteuser %>"
+LOCALDIR="<%= @localdir %>"
+REMOTEDIR="<%= @remotedir %>"
+SUFFIX="<%= @suffix %>"
+BWLIMIT_OPT="<%= @bwlimit_opt %>"
+
+# main loop
+
+# we use the delete options because we assume snapshots are being taken care of
+# specifically we assume that a snapshot has been made before the following code runs
+
+RSYNCOPTS="-av --partial --delete${BWLIMIT_OPT}"
+for DNAME in $HOSTS; do
+        HOST=`echo $DNAME | awk -F: '{ print $1 }'`
+        PORT=`echo $DNAME | awk -F: '{ print $2 }'`
+        TARGETDIR=$LOCALDIR/$HOST$SUFFIX
+        [ -d $TARGETDIR ] || mkdir -p $TARGETDIR
+        rsync $RSYNCOPTS -e "ssh -p $PORT -x -o 'StrictHostKeyChecking no'" $REMOTEUSER@$HOST:$REMOTEDIR/ $TARGETDIR
+done

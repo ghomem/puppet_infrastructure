@@ -1,0 +1,27 @@
+                                                                        <table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" bgcolor="#ffffff"object="drag-module-small" style="background-color: rgb(255, 255, 255);">
+                                                                                <tr>
+                                                                                        <td width="{{ INNERWIDTH }}" valign="middle" align="center">
+
+                                                                                                <table width="{{ FILEWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+                                                                                                        <tr>
+                                                                                                                <td valign="middle" width="100%" class="icon18" align="center">
+
+                                                                                                                        <!-- Input -->
+                                                                                                                        <table width="{{ FILEWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="left" style="border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="full">
+                                                                                                                                <tr>
+                                                                                                                                        <td width="{{ FILEHEIGHT }}" height="{{ FILEHEIGHT }}" bgcolor="{{ HEX_COLOR }}"style="text-align: center; background-color: {{ RGB_COLOR }};">&nbsp;</td>
+                                                                                                                                        <td width="20" height="{{ FILEHEIGHT }}" bgcolor="#f5f7f7"style="background-color: rgb(245, 247, 247);"></td>
+                                                                                                                                        <td  height="{{ FILEHEIGHT }}" bgcolor="#f5f7f7"style="text-align: left; font-family: Helvetica, Arial, sans-serif; font-size: {{ FILEFONTSIZE }}px; color: {{ RGB_COLOR }}; line-height: 24px; background-color: rgb(245, 247, 247);" ><!--[if !mso]><!--><span style="font-family: proxima_nova_rgregular, Helvetica; font-weight: normal; color: {{ RGB_COLOR }};"><!--<![endif]-->{{ DESCRIPTION }}<!--[if !mso]><!--></span><!--<![endif]--></td>
+                                                                                                                                        <td width="20" height="{{ FILEHEIGHT }}" bgcolor="#f5f7f7"style="background-color: rgb(245, 247, 247);"></td>
+                                                                                                                                </tr>
+                                                                                                                        </table><!-- End Space -->
+
+                                                                                                                </td>
+                                                                                                        </tr>
+                                                                                                        <tr>
+                                                                                                                <td width="100%" height="1" style="font-size: 1px; line-height: 1px;">&nbsp;</td>
+                                                                                                        </tr>
+                                                                                                </table>
+                                                                                        </td>
+                                                                                </tr>
+                                                                        </table>

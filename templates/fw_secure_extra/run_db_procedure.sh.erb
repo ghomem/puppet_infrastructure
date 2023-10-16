@@ -1,0 +1,7 @@
+#!/bin/bash 
+
+cd <%= @repo_location %>
+./getDBs.sh
+make
+./createDb
+<%= @local_geoip_dir %>/generate_csv.py

@@ -1,0 +1,76 @@
+<!-- Modal -->
+    <dialog id="modal-example">
+      <article class="scale-down">
+        <form
+          id="reqhelp"
+          action="reqhelp"
+          method="post"
+          enctype="multipart/form-data"
+        >
+          <div>
+            <a
+              href="#close"
+              aria-label="Close"
+              class="close"
+              data-target="modal-example"
+              onClick="toggleModal(event); resetForm('reqhelp'); checkHelpFields( 'name', 'email', 'msg' , 'helpbutton');"
+            >
+            </a>
+            <h3>We are here to support you!</h3>
+            <label>Your name</label>
+            <input
+              id="name"
+              type="text"
+              name="name"
+              placeholder="type your name"
+              onkeyup="checkHelpFields( 'name', 'email', 'msg' , 'helpbutton'); return false;"
+              onchange="checkHelpFields( 'name', 'email', 'msg' , 'helpbutton'); return false;"
+            />
+
+            <label>Your email</label>
+            <input
+              id="email"
+              type="text"
+              name="email"
+              placeholder="type your email"
+              onkeyup="checkHelpFields( 'name', 'email', 'msg' , 'helpbutton'); return false;"
+              onchange="checkHelpFields( 'name', 'email', 'msg' , 'helpbutton'); return false;"
+            />
+
+            <label>How can we help you?</label>
+            <textarea
+              id="msg"
+              type="text"
+              name="msg"
+              placeholder="type your message here"
+              rows="5"
+              onkeyup="checkHelpFields( 'name', 'email', 'msg' , 'helpbutton'); return false;"
+              onchange="checkHelpFields( 'name', 'email', 'msg' , 'helpbutton'); return false;"
+            ></textarea>
+          </div>
+          <div></div>
+          <div style="text-align: center;">
+            <button
+              type="button"
+              id="helpbutton"
+              class="contrast"
+	      disabled
+            >
+              Request help
+            </button>
+            <a
+              href="#cancel"
+              class="secondary button"
+              data-target="modal-example"
+              onClick="event.preventDefault(); toggleModal(event); resetForm('reqhelp'); checkHelpFields( 'name', 'email', 'msg' , 'helpbutton');"
+            >
+              Cancel
+            </a>
+          </div>
+	  <!-- where we are currently is also posted -->
+         <input type="hidden" name="current_url" value="{{ request.path }}" />
+        </form>
+      </article>
+    </dialog>
+    <!-- Include Confirmation-Modal -->
+    {% include 'confirmation-modal.html' %}

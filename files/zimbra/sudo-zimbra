@@ -1,0 +1,16 @@
+Defaults:zimbra !requiretty
+%zimbra ALL=NOPASSWD:/opt/zimbra/common/sbin/postfix
+%zimbra ALL=NOPASSWD:/opt/zimbra/common/sbin/postalias
+%zimbra ALL=NOPASSWD:/opt/zimbra/common/sbin/qshape.pl
+%zimbra ALL=NOPASSWD:/opt/zimbra/common/sbin/postconf
+%zimbra ALL=NOPASSWD:/opt/zimbra/common/sbin/postsuper
+%zimbra ALL=NOPASSWD:/opt/zimbra/common/sbin/postcat
+%zimbra ALL=NOPASSWD:/opt/zimbra/libexec/zmqstat
+%zimbra ALL=NOPASSWD:/opt/zimbra/libexec/zmmtastatus
+%zimbra ALL=NOPASSWD:/opt/zimbra/common/sbin/amavis-mc
+%zimbra ALL=NOPASSWD:/opt/zimbra/libexec/zmunbound
+%zimbra ALL=NOPASSWD:/opt/zimbra/libexec/zmdnscachealign *
+%zimbra ALL=NOPASSWD:/opt/zimbra/libexec/zmmailboxdmgr
+%zimbra ALL=NOPASSWD:/opt/zimbra/libexec/zmstat-fd *
+%zimbra ALL=NOPASSWD:/opt/zimbra/libexec/zmslapd
+%zimbra ALL=NOPASSWD:/opt/zimbra/common/sbin/nginx

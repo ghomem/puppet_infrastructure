@@ -1,0 +1,7 @@
+password        [success=2 default=ignore]      pam_unix.so obscure sha512
+password        [success=1 default=ignore]      pam_winbind.so use_authtok try_first_pass
+
+password        requisite                       pam_deny.so
+
+
+password        required

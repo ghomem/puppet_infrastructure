@@ -1,0 +1,5 @@
+ham
+spam
+wiki
+domain_wiki
+virus-quarantine

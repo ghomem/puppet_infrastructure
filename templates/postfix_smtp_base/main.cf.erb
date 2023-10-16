@@ -1,0 +1,121 @@
+## Modifications are commented with ''##'
+# See /usr/share/postfix/main.cf.dist for a commented, more complete version
+
+
+# Debian specific:  Specifying a file name will cause the first
+# line of that file to be used as the name.  The Debian default
+# is /etc/mailname.
+#myorigin = /etc/mailname
+
+smtpd_banner = $myhostname ESMTP $mail_name (Ubuntu)
+biff = no
+
+# appending .domain is the MUA's job.
+append_dot_mydomain = no
+
+# Uncomment the next line to generate "delayed mail" warnings
+#delay_warning_time = 4h
+
+readme_directory = no
+
+# TLS parameters
+## Use specified certificate file:
+smtpd_tls_cert_file=<%=@certificate_filename%>
+## Use specified key file:
+smtpd_tls_key_file=<%=@key_filename%>
+## Remove legacy smtpd_use_tls config
+## smtpd_use_tls=yes
+## Ensure TLS is enforced to encrypt SMTP client communication (Postfix SMTP server will announce and accept AUTH only after the TLS layer has been activated with STARTTLS)
+## Thus we do not need to set "smtpd_tls_auth_only = yes". 
+smtpd_tls_security_level = encrypt
+smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
+
+# and for client side non-authenticated delivery let us allow opportunistic TLS
+smtp_tls_security_level = may
+smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
+
+<% if @extra_sec %>
+
+# Security optimizations
+# Note: smtpd is for a relay that receives authenticated connections, smtp is for a sender that connects to a relayer and authenticates
+
+# Protocol: disable everything except TLS 1.2
+
+smtpd_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
+smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
+smtp_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
+smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
+
+# Ciphers
+
+smtp_tls_exclude_ciphers = EXP, MEDIUM, LOW, DES, 3DES, SSLv2, aNULL
+smtpd_tls_exclude_ciphers = EXP, MEDIUM, LOW, DES, 3DES, SSLv2, aNULL
+tls_high_cipherlist = kEECDH:+kEECDH+SHA:kEDH:+kEDH+SHA:+kEDH+CAMELLIA:kECDH:+kECDH+SHA:kRSA:+kRSA+SHA:+kRSA+CAMELLIA:!aNULL:!eNULL:!SSLv2:!RC4:!MD5:!DES:!EXP:!SEED:!IDEA:!3DES:!SHA
+
+smtp_tls_ciphers = high
+smtpd_tls_ciphers = high
+
+# Custom DH group for non export ciphers
+#
+# "File with DH parameters that the Postfix SMTP server should use with non-export EDH ciphers."
+# "Despite the name this is simply the non-export parameter file and the prime need not actually be 1024 bits long"
+#
+# http://www.postfix.org/postconf.5.html#smtpd_tls_dh1024_param_file
+# http://www.postfix.org/FORWARD_SECRECY_README.html#server_fs
+#
+smtpd_tls_dh1024_param_file = /etc/postfix/dhparams.pem
+
+<% end %>
+
+# See /usr/share/doc/postfix/TLS_README.gz in the postfix-doc package for
+# information on enabling SSL in the smtp client.
+
+smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
+## Use SMTP hostname instead of machine hostname
+myhostname = <%=@smtp_hostname%>
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+## Don't received email for machine hostame
+mydestination = $myhostname, localhost.localdomain, , localhost
+relayhost = 
+## Don't use IP v6
+##mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
+## Instead use IP v4
+mynetworks = 127.0.0.0/8
+mailbox_size_limit = 0
+recipient_delimiter = +
+inet_interfaces = all
+inet_protocols = all
+
+## Use Dovecot SASL
+## Reference: http://www.postfix.org/SASL_README.html
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_tls_security_options = noanonymous
+
+## Restrictions to SMTP clients 
+## Reference: http://www.postfix.org/SMTPD_ACCESS_README.
+
+## Reject any SMTP client not in the list of allowed IPs
+smtpd_client_restrictions =
+  check_client_access hash:/etc/postfix/client_access
+  reject
+
+## Reject MAIL FROM not in the list of allowed MAIL FROM
+## Reference: http://www.postfix.org/ADDRESS_VERIFICATION_README.html
+smtpd_sender_restrictions = 
+  check_sender_access hash:/etc/postfix/sender_access
+  reject
+
+## Data source that specifies which SASL users can use a MAIL FROM address 
+smtpd_sender_login_maps = hash:/etc/postfix/controlled_envelope_senders
+
+## Reject if the SALS user is not allowed to use this MAIL FROM
+smtpd_recipient_restrictions =
+  reject_sender_login_mismatch
+  permit_sasl_authenticated
+  reject
+
+## Reject if the email MAIL FROM is not allowed
+smtp_header_checks = regexp:/etc/postfix/smtp_header_checks.regexp

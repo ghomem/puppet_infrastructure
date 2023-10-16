@@ -1,0 +1,16 @@
+#!/bin/sh
+
+#This script executes the linux policies for the current user
+
+CALLER=$1
+USERNAME=`whoami`
+LINUX_POLICIES_DIR='<%= @linux_policies_dir %>'
+LINUX_POLICIES_SCRIPT=${LINUX_POLICIES_DIR}/USER/${USERNAME}.sh
+SYSLOG_TAG="linuxint-policies-${CALLER}"
+
+if [ -x ${LINUX_POLICIES_SCRIPT} ]; then
+  logger -p local1.notice -t ${SYSLOG_TAG} "Executing ${LINUX_POLICIES_SCRIPT}"
+  ${LINUX_POLICIES_SCRIPT}
+else
+  logger -p local1.notice -t ${SYSLOG_TAG} "Policies script ${LINUX_POLICIES_SCRIPT} not found"
+fi

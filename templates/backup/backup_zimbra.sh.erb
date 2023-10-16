@@ -1,0 +1,159 @@
+#!/bin/bash
+### Zimbra live backup script
+###
+### Disclaimer : this script is given "as is" and is not intended to replace any afficial backup technique.
+###
+### RESTORE COMMANDS :
+### su - zimbra
+### zmprov < restore_foo.txt
+### zmmailbox -z -m $ACCOUNT postRestURL "//?fmt=tgz&resolve=skip" /backupdir/$ACCOUNT.tgz
+### zmmailbox -z -m $ACCOUNT postRestURL "//?fmt=tgz&resolve=skip" /backupdir/$ACCOUNT.Trash.tgz
+### cat /backupdir/$ACCOUNT.filters.txt | sed 's/^/afrl /' | zmmailbox -z -m $ACCOUNT
+###
+### Miguel Cordas
+### mc@mcsi.ch
+### 
+### Version 0.6 / 21.11.2010
+### 
+### START CONFIGURATION ###
+### Dir for compressed account archives :
+BACKDIR="<%= @backdir %>"
+### Base dir for scripts :
+BASEDIR="<%= @bindir %>"
+### Dir for inputs
+ETCDIR="<%= @etcdir %>"
+### ### How many backups we should keep :
+BACKNUM="<%= @ndays %>";
+### base name for logfile (without .log) :
+LOGFILE="backlog";
+### Mount backup share
+#CMD_START="mount //SOME.NAS.IP.ADDRESS/backup /backup/zimbra -o lfs,username=backupuseryourown,password=passwordyourown";
+CMD_START="";
+#CMD_END="umount /backup/zimbra";
+CMD_END="";
+### END OF CONFIGURATION ###
+
+# reserved for future use
+#EMAIL="xxxxx@angulosolido.pt";
+#EMAIL_SUBJECT="Zimbra_mailserver01.XXXX.YYYY_backup";
+
+### ADD : spam folder backup.
+
+# Execute start command
+$CMD_START;
+
+# Initial check-list
+if [ `whoami` != "root" ]; then
+	echo -e "\nPlease run this script as root user. Aborting backup.";
+	exit
+fi
+if [ ! -f $ETCDIR/zimbra_backup_ignore_lst.txt ]; then
+	echo -e "\nMissing 'zimbra_backup_ignore_lst.txt'. Aborting backup."
+	exit
+fi
+if [ ! -f $ETCDIR/zimbra_backup_attribs_lst.txt ]; then
+	echo -e "\nMissing 'zimbra_backup_attribs_lst.txt'. Aborting backup."
+	exit
+fi
+DATE=`date +%Y%m%d`;
+DEL=`date "-d -$BACKNUM days" +%Y%m%d`;
+
+# Dir creation if missing
+if [ ! -d $BACKDIR ]; then mkdir $BACKDIR; fi
+# Remove restore files in case a previous backup had failed on the same day.
+if [ -d $BACKDIR/$DATE ]; then rm -rf $BACKDIR/$DATE; echo "Removing previous failed backup : "$BACKDIR/$DATE; fi
+mkdir $BACKDIR/$DATE;
+mkdir $BACKDIR/$DATE/prefs;                                                                                                                      
+mkdir $BACKDIR/$DATE/restore;
+chown -R zimbra:zimbra $BACKDIR;
+
+# Insert date and time in log file
+#echo "subject: "$EMAIL_SUBJECT > $BACKDIR/$DATE/$LOGFILE"_"$DATE.log;
+date >> $BACKDIR/$DATE/$LOGFILE"_"$DATE.log;
+
+# Get and export prefs for all users
+su - zimbra -c "zmprov -l gaa -v > $BACKDIR/$DATE/accountprefs.txt";
+
+# Split accounprefs.txt into one file per account
+cd $BACKDIR/$DATE/prefs;
+csplit -ksz -f pref $BACKDIR/$DATE/accountprefs.txt '/^#\s*name/' {*};
+cd ../;
+
+echo "Backing up accounts in "$BACKDIR/$DATE".";
+echo "Backing up accounts in "$BACKDIR/$DATE"." >> $BACKDIR/$DATE/$LOGFILE"_"$DATE.log;
+# Parse pref files
+for PREFFILE in $BACKDIR/$DATE/prefs/*; do
+	ACCOUNT=`cat $PREFFILE | grep ^"# name" | cut -d" " -f3`;
+	SHORTNAME=`echo $ACCOUNT | awk -F@ '{print $1}' | awk -F. '{print $1}'`;
+	
+# If account name not in zimbra_backup_ignore_lst.txt, get all desired prefs (present in zimbra_backup_attribs_lst.txt)
+	RES=`grep -c $SHORTNAME $ETCDIR/zimbra_backup_ignore_lst.txt`;
+	if [ $RES -eq "0" ];  then
+		echo "Backing up: "$ACCOUNT;
+		echo "Backing up: "$ACCOUNT >> $BACKDIR/$DATE/$LOGFILE"_"$DATE.log;
+		mv $PREFFILE $BACKDIR/$DATE/prefs/$ACCOUNT.txt;
+                # a stronger default password - will be changed to user's later
+		RESTCOMMAND="ca "$ACCOUNT" 'XgYYVzYUULC79wRU4kmJ'";
+		for ATTRIB in `cat $ETCDIR/zimbra_backup_attribs_lst.txt`; do
+			ATTRIBLINE=`grep ^$ATTRIB":" $BACKDIR/$DATE/prefs/$ACCOUNT.txt`;
+			if [ -n "$ATTRIBLINE" ]; then
+				ATTRIBDETAIL=`echo $ATTRIBLINE | sed "s/"$ATTRIB":\s//1"`; 
+				if [ `echo $ATTRIBDETAIL | grep -c " "` -eq 0 ]; then
+					RESTCOMMAND+=" "$ATTRIB" "$ATTRIBDETAIL;
+				else
+					RESTCOMMAND+=" "$ATTRIB" '"$ATTRIBDETAIL"'";
+				fi
+			fi
+		done;
+# Write account creation zmprov ready script
+		echo $RESTCOMMAND >> $BACKDIR/$DATE/restore/restore_accounts.txt;
+# Write password restore zmprov ready script
+		ACCOUNTPWD=`cat $BACKDIR/$DATE/prefs/$ACCOUNT.txt | grep "userPassword" | cut -d" " -f2`;
+		if [ $ACCOUNTPWD!="VALUE-BLOCKED" ] && [ -n $ACCOUNTPWD ]; then echo "ma "$ACCOUNT" userPassword "$ACCOUNTPWD >> $BACKDIR/$DATE/restore/restore_passwords.txt; fi
+# Write Alias restore zmprov ready script		
+		ALIASES=`cat $BACKDIR/$DATE/prefs/$ACCOUNT.txt | grep "zimbraMailAlias:" | cut -d" " -f2`;
+		for ALIASLINE in $ALIASES; do
+			if [ -n $ALIASLINE ]; then echo "aaa "$ACCOUNT" "$ALIASLINE >> $BACKDIR/$DATE/restore/restore_aliases.txt; fi;
+		done;
+# Write forward restore zmprov ready script (pref and hidden)	
+		FORWARDS=`cat $BACKDIR/$DATE/prefs/$ACCOUNT.txt | grep "zimbraPrefMailForwardingAddress:" | cut -d" " -f2`;
+        	for FORWARDLINE in $FORWARDS; do
+        		if [ -n $FORWARDLINE ]; then echo "ma "$ACCOUNT" zimbraPrefMailForwardingAddress "$FORWARDLINE >> $BACKDIR/$DATE/restore/restore_forwards.txt; fi;
+		done;
+		FORWARDS=`cat $BACKDIR/$DATE/prefs/$ACCOUNT.txt | grep "zimbraMailForwardingAddress:" | cut -d" " -f2`;
+		for FORWARDLINE in $FORWARDS; do
+			if [ -n $FORWARDLINE ]; then echo "ma "$ACCOUNT" +zimbraMailForwardingAddress "$FORWARDLINE >> $BACKDIR/$DATE/restore/restore_forwards.txt; fi;
+		done;
+# Export account mailbox and filters
+		su - zimbra -c "zmmailbox -z -m $ACCOUNT -t 0 getRestURL '//?fmt=zip&meta=1' > $BACKDIR/$DATE/$ACCOUNT.zip" 2>> $BACKDIR/$DATE/$LOGFILE"_"$DATE.log;
+		su - zimbra -c "zmmailbox -z -m $ACCOUNT getRestURL '/Trash?fmt=tgz' > $BACKDIR/$DATE/$ACCOUNT.Trash.tgz" 2>> $BACKDIR/$DATE/$LOGFILE"_"$DATE.log;
+		su - zimbra -c "zmmailbox -z -m $ACCOUNT gfrl > $BACKDIR/$DATE/$ACCOUNT.filters.txt" 2>> $BACKDIR/$DATE/$LOGFILE"_"$DATE.log;
+		echo $ACCOUNT >> $BACKDIR/$DATE/accounts.txt;
+	else
+# If account name in zimbra_backup_ignore_lst.txt, remove prefs file
+		echo "Skipping: "$ACCOUNT;
+		echo "Skipping: "$ACCOUNT >> $BACKDIR/$DATE/$LOGFILE"_"$DATE.log;
+		rm -r $PREFFILE;
+	fi
+done;
+
+# set read permissions to allow remote sync
+find $BACKDIR/$DATE/ -type f -exec chmod 644 {} \;
+find $BACKDIR/$DATE/ -type d -exec chmod 755 {} \;
+
+# End operations
+echo "Accounts backed up in "$BACKDIR/$DATE".";
+echo "Accounts backed up in "$BACKDIR/$DATE"." >> $BACKDIR/$DATE/$LOGFILE"_"$DATE.log;
+echo "Deleting "$BACKNUM" days old backup in "$BACKDIR/$DEL".";
+echo "Deleting "$BACKNUM" days old backup in "$BACKDIR/$DEL"." >> $BACKDIR/$DATE/$LOGFILE"_"$DATE.log;
+
+rm -rf $BACKDIR/$DEL;
+date >> $BACKDIR/$DATE/$LOGFILE"_"$DATE.log;
+
+# reserved for future use
+#/opt/zimbra/postfix/sbin/sendmail -v $EMAIL < $BACKDIR/$DATE/$LOGFILE"_"$DATE.log;
+
+#execute end command
+cd /;
+$CMD_END;
+echo "Done.";

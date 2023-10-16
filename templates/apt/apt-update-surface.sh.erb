@@ -1,0 +1,19 @@
+#!/bin/bash
+
+RC_ERR=1
+UPDATE_CMD=<%= @localdir %>/bin/apt-update-pkg.sh
+SURFACE="<%= @_apt_surface_list %>"
+
+apt-get update 2>&1 > /dev/null
+RC=$?
+
+if [ ! $RC -eq 0 ]; then
+  echo "error running apt-get update"
+  exit $RC
+fi
+
+for p in $SURFACE; do
+  $UPDATE_CMD $p
+done
+
+exit 0

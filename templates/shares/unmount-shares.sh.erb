@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# Unmount shares currently mounted in the laptop
+
+MDIR="/tmp/$USER/mnt-manual"
+SUDO=sudo
+DELAY=<%= @delay %>
+
+# MAIN
+<% @shares.each do |share| %>
+$SUDO umount $MDIR/<%=share['share_name']%>
+sleep $DELAY
+<% end %>
+
+kdialog --title 'Unmount shares' --msgbox 'Shares unmounted'

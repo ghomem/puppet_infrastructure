@@ -1,0 +1,14 @@
+#!/usr/bin/python3
+
+import ipaddress, csv
+
+IP_DB_LOCATION='<%= @ip_db_location %>'
+OUT_CSV_LOCATION='<%= @out_csv_location %>'
+
+with open(IP_DB_LOCATION, 'r') as src_f:
+    out_f = open(OUT_CSV_LOCATION,'w')
+    out_csv = csv.writer(out_f, delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
+    for l in src_f.readlines():
+        fst, snd, trd = l.split()
+        out_csv.writerow([ipaddress.IPv4Address(int(fst)).__str__(), ipaddress.IPv4Address(int(snd)).__str__(), fst, snd, trd, trd])
+    out_f.close()

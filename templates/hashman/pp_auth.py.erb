@@ -1,0 +1,569 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+
+import sys
+import re
+import os
+import subprocess
+import logging
+import logging.handlers
+import crypt
+import time
+import signal
+import random
+from random import randint
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.header import Header
+import struct
+import shutil
+import base64
+import getpass
+import glob
+import hashlib
+import binascii
+from prettytable import PrettyTable
+
+
+# apt-get install python-cracklib python-setproctitle <3
+import crack
+import setproctitle
+import html.entities
+
+# for the import / export feature
+import json
+import io
+
+# imports from separate utils file
+from hashman_utils import *
+from libhashman.switch import switch
+from libhashman.config import *
+from libhashman.coding import *
+from libhashman.typeutils import *
+from libhashman.dbutils import *
+from libhashman.mailutils import *
+from libhashman.miscutils import *
+from libhashman.interface import *
+from libhashman.test import *
+
+
+# main function
+def main():
+
+    # mask credentials on cmdline, first things first
+    setproctitle.setproctitle(OURPROCTITLE)
+
+    # !! put code here and syslogging will fail !! #
+
+    # normal use: INFO, debug use: DEBUG
+    if DEBUG_MODE:
+        logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(message)s')
+    else:
+        logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
+
+    # separate logger for syslog
+    syslogger = logging.getLogger('MyLogger')
+    syslog_handler = logging.handlers.SysLogHandler('/dev/log')
+    syslogger.addHandler(syslog_handler)
+    # disable stdout writing for this logger
+    syslogger.propagate = False
+
+    # handle signals nicely
+    signals_handle( True )
+
+    cmd = ''
+    extramsg = ''
+    logprefix = '[' + str(os.getpid()) + ']'
+    nargs = len(sys.argv)
+    # argument 0 also counts
+    if nargs < 2:
+        print_usage()
+
+    # we have at least this one
+    cmd = sys.argv[1]
+
+    # nargs must be at least 3 except for the short commands
+    if nargs < 3:
+        if ( cmd not in SHORTCMDS ):
+            print_usage()
+
+    if ( cmd not in SHORTCMDS ):
+        username = sys.argv[2]
+    else:
+        username = 'SHORT CMD'
+
+    # initialize db with empty files if necessary
+    rc = initdb()
+    if ( rc != E_OK ):
+        logging.error('Problem initializing db. Do you have write permission?')
+        exit(rc)
+
+    # this will be overwritten for use with plugins whenever possible
+    finalpassword = 'dummypass'
+    # flag that prevents notifications from being sent
+    ignorenotif = False
+    # extra message for email notifications
+    extra_msg = ''
+
+    for case in switch(cmd):
+
+        if case('auth'):
+            if nargs < 4:
+                print_usage()
+            else:
+                password = sys.argv[3]
+
+            syslogger.info( OURPROCTITLE + logprefix + ': user ' + username + ' wants to authenticate')
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = auth( username , password )
+            break
+
+        # to be used by an external caller like hashman-web
+        if case('extauth'):
+            if nargs < 5:
+                print_usage()
+            else:
+                password  = sys.argv[3]
+                extra_msg = sys.argv[4]
+
+            syslogger.info( OURPROCTITLE + logprefix + ': user ' + username + ' wants to externally authenticate ' + extra_msg )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = auth( username , password )
+            break
+
+        if case('setpw'):
+            if nargs < 5:
+                print_usage()
+            else:
+                password = sys.argv[3]
+                newpassword = sys.argv[4]
+            syslogger.info( OURPROCTITLE + logprefix + ': user ' + username + ' wants to setpw')
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = auth( username , password )
+            if ( rc == E_OK ):
+                rc = setpw( username, newpassword, False, password )
+                finalpassword = newpassword
+            else:
+                logging.error('Incorrect old user/password')
+            break
+
+        if case('setpwint'):
+            if nargs < 3:
+                print_usage()
+
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            password     = getpass.getpass('Current password:')
+            newpassword  = getpass.getpass('New password:')
+            newpassword2 = getpass.getpass('Confirm new password:')
+
+            if ( newpassword != newpassword2 ):
+                print('Passwords do not match')
+                exit(E_ERR)
+
+            syslogger.info( OURPROCTITLE + logprefix + ': user ' + username + ' wants to interactively setpw')
+            rc = auth( username , password )
+            if ( rc == E_OK ):
+                rc = setpw( username, newpassword, False, password )
+                finalpassword = newpassword
+            else:
+                logging.error('Incorrect old user/password')
+            break
+
+        if case('lock'):
+            syslogger.info( OURPROCTITLE + logprefix + ': to lock password for user ' + username )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            if ( nargs > 3 ):
+                # called from puppet ignore pre-existing lock (any extra arg will do)
+                ignorenotif = True
+                rc = lockpw( username, True )
+            else:
+                rc = lockpw( username, False  )
+            break
+
+        if case('unlock'):
+            if nargs < 4:
+                print_usage()
+            else:
+                # we unlock a user only when we are in touch with him and know he is about to change password
+                extramsg = sys.argv[3]
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to unlock password for user ' + username )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = unlockpw( username )
+            break
+
+        if case('useradd'):
+            if ( nargs < 7 ):
+                print_usage()
+                break
+            else:
+                email = sys.argv[3]
+                name = sys.argv[4]
+                company = sys.argv[5]
+                confirm_mail = sys.argv[6]
+                # Check content of 6th argument to determine wether to send mail notification or not
+                if ( confirm_mail == "SILENT" ):
+                    mailnotif = False
+                elif ( is_email(confirm_mail) ):
+                    check_hashman_web('useradd')
+                    mailnotif = True
+                else:
+                    print_usage()
+                    break
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to add user ' + username )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            password = mkpasswd(PASSWORDLEN)
+            rc = useradd( username, password, email, name, company, True, mailnotif, confirm_mail )
+            finalpassword = password
+            break
+
+        if case('userdel'):
+            syslogger.info( OURPROCTITLE + logprefix + ': to delete user ' + username )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = userdel( username )
+            break
+
+        if case('expire'):
+            syslogger.info( OURPROCTITLE + logprefix + ': to expire password for user ' + username )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = expirepw( username )
+            break
+
+        if case('unexpire'):
+            syslogger.info( OURPROCTITLE + logprefix + ': to unexpire password for user ' + username )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = unexpirepw( username )
+            break
+
+        if case('reset'):
+            check_hashman_web('reset')
+            if ( nargs > 3 ):
+                oldpassword = sys.argv[3]
+            else:
+                oldpassword = ''
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to reset password for user ' + username )
+
+            lockdb(LOCKTIMEOUT)
+            status = E_OK
+
+            # if we receive the old password then we auth to be sure it is correct
+            if ( oldpassword != ''):
+                syslogger.info( OURPROCTITLE + logprefix + ': old password for ' + username + ' is given' )
+            else:
+                syslogger.info( OURPROCTITLE + logprefix + ': old password for ' + username + ' is NOT given' )
+
+            newpassword = mkpasswd(PASSWORDLEN)
+            # if the old password is not empty this only works if the old pass is correct because setpw does auth in that case
+            rc = setpw( username, newpassword, False, oldpassword )
+
+            # expiring password after reset to force the user to change it, instead of just using the temporary one
+            rc_exp = expirepw(username)
+            # if rc == E_OK and rc_exp == E_OK --> rc stays E_OK
+            # if rc == E_OK and rc_exp == E_ERR --> rc becomes E_ERR
+            # if rc == E_ERR and rc_exp == E_OK --> rc stays E_ERR
+            # if rc == E_ERR and rc_exp == E_ERR --> rc stays E_ERR
+            # this logic ensures rollback if any of the operations returns E_ERR
+            if rc_exp == E_ERR:
+                rc = E_ERR
+
+            finalpassword = newpassword
+
+            if ( rc == E_OK ):
+                email = getemail( username )
+                name = getcname( username )
+                notify( email, name, username, newpassword, BODY_TEXT_RESET )
+                logging.info('user ' + username + ' reset with initial password ' + newpassword)
+
+            break
+
+        if case('testemail'):
+            check_hashman_web('testemail')
+            lockdb(LOCKTIMEOUT)
+            email = getemail( username )
+            name = getcname( username )
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to test email to ' + username + ' and  ' + email )
+
+            notify( email, name, username, 'dummypass', BODY_TEXT_TEST, )
+            rc = E_OK
+            break
+
+        if case('printinfo'):
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to print info for user ' + username )
+            # we get an arbitraty field to make sure the user exists
+            lockdb(LOCKTIMEOUT)
+            company = getcompany( username )
+
+            if ( company is not None):
+                mk_info( username, company )
+                rc = E_OK
+            else:
+                logging.error('information for ' + username + ' not found')
+                rc = E_ERR
+            break
+
+        if case('printpubkey'):
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to print pubkey for user ' + username )
+            # we get an arbitraty field to make sure the user exists
+            lockdb(LOCKTIMEOUT)
+            company = getcompany( username )
+
+            if ( company is not None):
+                mk_pubkey( username, company )
+                rc = E_OK
+            else:
+                logging.error('information for ' + username + ' not found')
+                rc = E_ERR
+            break
+
+        if case('export'):
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to export data for user ' + username )
+            # we get an arbitraty field to make sure the user exists
+            lockdb(LOCKTIMEOUT)
+            company = getcompany( username )
+
+            if ( company is not None):
+                mk_info_export( username )
+                rc = E_OK
+            else:
+                logging.error('information for ' + username + ' not found')
+                rc = E_ERR
+            break
+
+        if case('import'):
+            if nargs < 4:
+                print_usage()
+            else:
+                json_b64_userdata = sys.argv[3]
+
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+
+            # we get an arbitraty field to make sure the does NOT exist
+            company = getcompany( username )
+
+            if ( company is None ):
+                syslogger.info( OURPROCTITLE + logprefix + ': to import data for user ' + username )
+                rc = useradd_import( username, json_b64_userdata )
+            else:
+                logging.error('user ' + username + ' already exists')
+                rc = E_ERR
+
+            break
+
+        if case('setecryptfs'):
+            if nargs < 5:
+                print_usage()
+            else:
+                ppsigs = sys.argv[3]
+                ppwrapped = sys.argv[4]
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to set ecryptfs parameters for user ' + username )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = setecryptfs( username, ppsigs, ppwrapped )
+            break
+
+        if case('setpubkey'):
+            if nargs < 4:
+                print_usage()
+            else:
+                pubkey = sys.argv[3]
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to set pubkey for user ' + username )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = setpubkey( username, pubkey )
+            break
+
+        if case('unsetpubkey'):
+            if nargs < 3:
+                print_usage()
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to unset pubkey for user ' + username )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = unsetpubkey( username )
+            break
+
+        if case('unsetecryptfs'):
+            if nargs < 3:
+                print_usage()
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to unset ecryptfs for user ' + username )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = unsetecryptfs( username )
+            break
+
+        if case('setemail'):
+            if nargs < 4:
+                print_usage()
+            else:
+                email = sys.argv[3]
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to set email for user ' + username )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = setemail( username, email )
+            break
+
+        if case('setcompany'):
+            if nargs < 4:
+                print_usage()
+            else:
+                company = sys.argv[3]
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to set company for user ' + username )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = setcompany( username, company )
+            break
+
+        if case('setcname'):
+            if nargs < 4:
+                print_usage()
+            else:
+                cname = sys.argv[3]
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to set cname for user ' + username )
+            # lock access - program will exit if we fail to get the lock
+            lockdb(LOCKTIMEOUT)
+            rc = setcname( username, cname )
+            break
+
+        if case('test'):
+            # check if we provided the SILENT argument
+            if nargs > 3:
+                print_usage()
+            elif nargs == 3:
+                if sys.argv[2].lower() == 'silent':
+                    silent = True
+                else:
+                    print_usage()
+            else:
+                check_hashman_web('test')
+                silent = False
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to run self test' )
+            lockdb(LOCKTIMEOUT)
+            test_XXX(silent)
+            # this is to force database restore after testing
+            rc = E_ERR
+            username = 'SELF TEST FAIL IS BY DESIGN'
+            break
+
+        if case('listusers'):
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to list users' )
+            rc = listusers()
+            sys.exit(rc)
+
+        if case('listplugins'):
+
+            syslogger.info( OURPROCTITLE + logprefix + ': to list plugins' )
+            print('')
+            print('Plugin directory is ' + PLUGIN_DIR)
+            print('')
+            for i in [ 1, 2, 3 ]:
+                print('type ' + str(i) + ' ' , listplugins(i, True))
+
+            sys.exit(E_OK)
+
+        if case('inform'):
+            # Even though we already created a temporary password for the user on useradd,
+            # since we will only allow the user to change their password through this command
+            # we need to regenerate the random password so that it can be sent to the user via email
+
+            check_hashman_web('inform')
+            lockdb(LOCKTIMEOUT)
+
+            newpassword = mkpasswd(PASSWORDLEN)
+            # if the old password is not empty this only works if the old pass is correct because setpw does auth in that case
+            rc = setpw( username, newpassword )
+
+            # expiring password after reset to force the user to change it, instead of just using the temporary one
+            rc_exp = expirepw(username)
+            if rc_exp == E_ERR:
+                rc = E_ERR
+
+            finalpassword = newpassword
+
+            if ( rc == E_OK ):
+                email = getemail( username )
+                name = getcname( username )
+                notify( email, name, username, finalpassword, BODY_TEXT_INFORM, )
+                logging.info('user ' + username + ' informed with initial password ' + newpassword)
+
+            rc = E_OK
+            break
+
+        if case():
+            print_usage()
+
+    restoreflag = False
+    dbchanged = False
+
+    # we don't disclose specifics
+    if ( rc == E_OK ):
+        logging.info('action success for user ' + username)
+        syslogger.info( OURPROCTITLE + logprefix + ': action success for user ' + username )
+
+        # email notification
+        if ( cmd in NOTIFCMDS and TESTENV is not True and ignorenotif is not True ):
+            notif_email( MAIL_FROM  , SUPPORT_TEAM, username , cmd , 'SUCCESS', extra_msg )
+
+        # flag a databse change after successful write action
+        if ( cmd in WRITERCMDS ):
+            logging.debug('database was changed')
+            dbchanged = True
+    else:
+        if ( cmd == 'test' ):
+            logging.info('restoring database after unit tests')
+        else:
+            logging.error('action failure for user ' + username)
+
+        # we don't sent lock failures to syslog because puppet is constanly locking users that need locking
+        if ( cmd != 'lock' ):
+            syslogger.info( OURPROCTITLE + logprefix + ': action failure for user ' + username )
+
+        # we send email notifications only for some commands
+        if ( cmd in NOTIFCMDS and TESTENV is not True and ignorenotif is not True ):
+            notif_email( MAIL_FROM  , SUPPORT_TEAM , username , cmd , 'FAIL', extra_msg )
+
+        # something went wrong on a write action let's rollback
+        if ( cmd in WRITERCMDS ):
+            logging.debug('will restore database')
+            restoreflag = True
+
+    # trigger whatever processes are needed after a database changed
+    if ( dbchanged and not restoreflag ):
+        logging.info('running ondbchange hooks for command ' + cmd + ' on user ' + username )
+        syslogger.info( OURPROCTITLE + logprefix + ': running ondbchange hooks for command ' + cmd + ' on user ' + username )
+        ondbchange(cmd, username, finalpassword, syslogger, logprefix, extramsg)
+
+    # let's release the lock before exiting, and restore db if something went wrong
+    unlockdb( restoreflag )
+
+    sys.exit(rc)
+
+
+# we may start
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,5 @@
+# Prevent logfiles from also getting written to /var/log/syslog
+<%# Logs that should not go to syslog are the ones in the hash-of-hashes "logs_to_stream" -%>
+<% @logs_to_stream.each do |key_appname, subhash| -%>
+if $programname == '<%=key_appname%>' then stop
+<% end -%>

@@ -1,0 +1,165 @@
+#!/bin/bash
+# unix extensions must be disabled on the server for local uid/gid mapping to work!
+
+CIFSVERSION_DEFAULT="1.0"
+MSGPASSWORD="Please type the password for user "
+MSGERROR="Error mounting shared folder "
+MYTITLE="Shared folder access"
+MDIR="/tmp/$USER/mnt-manual"
+USERNAME=<%= @auth_user %>
+CHARSET=utf8
+EXPLORER_CMD=dolphin
+EXPLORER="<%= @explorer %>"
+SYMLINKS="<%= @symlinks %>"
+CACHE="<%= @cache %>"
+CACHESTR=""
+
+if [ x$CACHE = "xFalse" ]; then
+    CACHESTR="cache=none,"
+fi
+
+# replaces a command called mountpoint that doesn't work with spaces on filenames
+function check_mount {
+
+for i in `cat /proc/mounts | cut -d' ' -f2`; do
+  NAMEWITH040=`echo $1 | sed 's/ /\\\040/g'`;
+  MYNAME=${NAMEWITH040%/}
+  if [ "x$MYNAME" = "x$i" ]; then
+   return 0
+  fi
+done
+
+return 1
+
+}
+
+# Check if the user already typed the password and if not ask for it
+function get_password
+{
+  if [ "X$PASSWORD" = "X" ]
+  then
+     MYTITLE=$1
+     USERNAME=$2
+     PASSWORD=`kdialog --title "$MYTITLE"  --password "$MSGPASSWORD $USERNAME"`
+  fi
+}
+
+function mountshare
+{
+  SERVER=$1
+  SHARE=$2
+  USERNAME=$3
+  DOMAIN=$6
+  CIFSVERSION=$7
+
+  if [ -z $CIFSVERSION ]; then
+    CIFSVERSION=$CIFSVERSION_DEFAULT
+  fi
+
+  # this is to workaround accesses from other users
+  # when server has unix extensions = yes and since
+  # the client "nounix" options breaks things
+  GID=0
+
+  # other possibilities for GID
+  #GID=`id -g`
+  #GID=`getent group "domain admins" |cut -d ":" -f 3`
+
+  # not under the user's $HOME as it could be NFS mounted
+  # to avoid confusion MDIR is different on the manual mounting scripts vs the policy library
+  # it is a global variable here
+  TDIR="$MDIR/$SHARE"
+  VERIFYSUDO=$5
+  SUDO=""
+  MOUNTED=no
+
+  DISTRIB_RELEASE=""
+  if [ -f /etc/lsb-release ]; then
+     . /etc/lsb-release
+  fi
+
+  if [ "$DISTRIB_RELEASE" = 12.04 ] || [ "$DISTRIB_RELEASE" = 16.04 ] || [ "$DISTRIB_RELEASE" = 20.04 ] || [ "$VERIFYSUDO" = "true" ]; then
+      SUDO="sudo"
+  else
+      SUDO=""
+  fi
+
+  # check if parent dir exists
+  if [ ! -d "$MDIR" ]; then
+    mkdir -p "$MDIR"
+  fi
+
+  # enforce permissions on parent dir
+  chmod 700 "$MDIR"
+
+  # check if target dir exists
+  if [ ! -d "$TDIR" ]; then
+    mkdir -p "$TDIR"
+  fi
+
+  # check if it is already mounted
+
+  check_mount "$TDIR"
+  rc=$?
+
+  # do nothing if it is already mounted
+
+  if [ $rc -eq 0 ]; then
+    echo "$TDIR already mounted. Will not remount."
+    MOUNTED=yes
+  fi
+
+  # nodsf it is necessary to certain samba server versions like a bug WA
+  # https://bugs.launchpad.net/ubuntu/+source/samba/+bug/286828
+  # some for nobrl option
+  # https://bugs.launchpad.net/ubuntu/+source/openoffice.org/+bug/578402
+  if [ ! X$MOUNTED = "Xyes" ]; then
+
+    if [ ! -z $DOMAIN ]; then
+        DOMAINSTR=",domain=$DOMAIN"
+    else
+        DOMAINSTR=""
+    fi
+
+    get_password "$MYTITLE" $USERNAME
+    $SUDO /sbin/mount.cifs "//$SERVER/$SHARE" "$TDIR" -o ${CACHESTR}nobrl,nodfs,noacl,suid,username=$USERNAME,password=$PASSWORD,uid=$UID,gid=$GID,forceuid,forcegid,file_mode=0600,dir_mode=0700,iocharset=$CHARSET${DOMAINSTR},vers=$CIFSVERSION
+    rc=$?
+    if [ ! $rc -eq 0 ]; then
+      echo "Problem mounting //$SERVER/$SHARE on $TDIR."
+      kdialog --title "$MYTITLE" --error "$MSGERROR //$SERVER/$SHARE on $TDIR."
+      exit 1
+    fi
+  fi
+
+  # clear $SHARE from "/"s, if we are mounting a subdir let's keep only the last component
+
+  DISPLAYNAME=`echo $SHARE | awk -F/ '{ print $NF }'`
+
+  # create a symlink on the Desktop, test for existence
+  # or it will create a second symlink inside the share
+
+  if [ x$SYMLINKS == "xTrue" ]; then
+    LINKNAME="$HOME/Desktop/$DISPLAYNAME em $SERVER"
+    if [ ! -h "$LINKNAME" ]; then
+      ln -s "$TDIR" "$LINKNAME"
+    fi
+  fi
+
+}
+
+# MAIN
+
+<% @shares.each do |share| %>
+SERVER=<%=share['share_server']%>
+SHARENAME=<%=share['share_name']%>
+DOMAIN="<%=share['domain']%>"
+CIFSVERSION="<%=share['cifs_version']%>"
+mountshare $SERVER $SHARENAME $USERNAME "" true "$DOMAIN" $CIFSVERSION
+<% end %>
+
+
+# Open file explorer on the root path of manually mounted shares
+
+if [ x$EXPLORER == "xTrue" ]; then
+  $EXPLORER_CMD "$MDIR" &
+fi

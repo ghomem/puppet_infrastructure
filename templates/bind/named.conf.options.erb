@@ -1,0 +1,15 @@
+options {
+        directory "<%= @directory %>";
+        listen-on port 53 { 127.0.0.1; <% @allowed_networks.each do |network| %> <%= network %>; <% end %>   };
+        forwarders {
+
+        };
+
+        auth-nxdomain no;
+        allow-query     { localhost; <% @allowed_networks.each do |network| %> <%= network %>; <% end %>  };
+        allow-query-cache { localhost; <% @allowed_networks.each do |network| %> <%= network %>; <% end %> };
+};
+
+logging {
+        category default { default_syslog; };
+};

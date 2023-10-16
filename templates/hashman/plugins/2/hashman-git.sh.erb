@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# vars such as
+# /root/gitrepos/devops/
+# hashman-backup
+# /etc/puppetlabs/code/environments/production
+
+GITDIR='<%= @gitdir %>'
+GITSUBDIR='<%= @gitsubdir %>'
+SYSTEMDIR='<%= @systemdir %>'
+GITPUSH='<%= @gitpush %>'
+GITPULL='<%= @gitpull %>'
+
+DATESTR=`date`
+
+for i in $EXCLUSIONS; do
+  EXCLUDESTR="$EXCLUDESTR --exclude $i"
+done
+
+if [ ! -z "$1" ]; then
+  COMMENT="$1"
+else
+  COMMENT="hashman puppet sync at $DATESTR"
+fi
+
+cd $GITDIR
+
+if [ x$GITPULL = 'xyes' ]; then
+  git pull
+fi
+
+rsync -av $SYSTEMDIR/manifests/01_hashman $GITDIR/$GITSUBDIR
+
+git add -A
+git commit -a -m "$COMMENT"
+
+if [ x$GITPUSH = 'xyes' ]; then
+  git push origin master --tags
+fi
+

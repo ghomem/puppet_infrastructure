@@ -1,0 +1,25 @@
+
+config_version	1.2
+
+snapshot_root	<%= @backdir %>
+
+# BACKUP LEVELS / INTERVALS
+retain	daily	<%= @ndays %>
+
+
+# BACKUP POINTS 
+# LOCALHOST
+backup	<%= @basedir %>	./<%= @prefix %>
+
+cmd_rsync	/usr/bin/rsync
+verbose		2
+loglevel	3
+cmd_logger	/usr/bin/logger
+
+# If enabled, rsnapshot will write a lockfile to prevent two instances
+# from running simultaneously (and messing up the snapshot_root).
+# If you enable this, make sure the lockfile directory is not world
+# writable. Otherwise anyone can prevent the program from running.
+lockfile	/tmp/rsnapshot_<%= @title %>.pid
+
+

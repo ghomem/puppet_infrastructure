@@ -1,0 +1,87 @@
+#!/bin/bash
+# pre-commit git hook to check the validity of a puppet manifest
+# 
+# Prerequisites:
+#   Follow the procedure to install the puppet agent until (excluding) "Sign certificate on master"
+#     https://bitbucket.org/asolidodev/puppet_infrastructure/wiki/Node%20Configuration
+#   Install puppet-lint from the repository:
+#     sudo apt-get install puppet-lint
+#   In principle you already have ruby installed but if not you can do:
+#     sudo apt-get install ruby
+#
+# Install:
+#   Create a symlink to this script:
+#     $ cd .git/hooks/ && ln --symbolic --verbose --interactive ../../pre-commit pre-commit
+#
+
+# Looks like we need this for read to work
+# (see for example https://stackoverflow.com/questions/3417896/how-do-i-prompt-the-user-from-within-a-commit-msg-hook)
+exec < /dev/tty
+
+declare -a FILES
+IFS="
+"
+# We look into changes not yet staged
+# (to make sure we check commits in which the staging area is being bypassed)
+FILES=$(git diff --name-only HEAD)
+
+for file in ${FILES[@]}
+do
+  if [[ $file =~ \.*.pp$ ]]
+  then
+    # this is the location of the puppet installed through our install scripts
+    /opt/puppetlabs/bin/puppet parser validate "$file"
+    RC=$?
+    if [ $RC -ne 0 ]
+    then
+      exit $RC
+    fi
+    # Let's make puppet-lint fail on warnings so that
+    # we get to look at those _before_ commiting and choose what to do
+    # and so that we can ignore linting if we are doing an urgent commit
+    puppet-lint "$file" --fail-on-warnings
+    RC=$?
+    if [ $RC -ne 0 ]
+    then
+      # Let's not allow for backslash escapes (-r) and use readline (-e)
+      echo "Do you want to commit anyway?"
+      echo "(only 'yes' will be accepted to continue)"
+      read CHOICE
+      if
+        [ "x${CHOICE}" = 'xyes' ]
+      then
+        exit 0
+      fi
+      exit $RC
+    fi
+  fi
+
+  # We've turned this off because we don't have YAML files in this repository
+  # (if we need to add it, maybe we can use the default repository's yamllint package)
+  #if [[ $file =~ \.*.yaml$ ]]
+  #then
+  #  yaml-lint "$file"
+  #  RC=$?
+  #  if [ $RC -ne 0 ]
+  #  then
+  #    exit $RC
+  #  fi
+  #fi
+
+  if [[ $file =~ \.*.erb$ ]]
+  then 
+    # If we try to use puppet's ruby and erb before the pipe we get:
+    # "no program input from stdin allowed in tainted mode (SecurityError)"
+    # So we use the system ruby for this. After the pipe, for the syntax check (-c)
+    # we use the ruby that comes with puppet (as installed by our install script):
+    erb -x -T '-' -P "$file" | /opt/puppetlabs/puppet/bin/ruby -c
+    RC=$?
+    if [ $RC -ne 0 ]
+    then
+      exit $RC
+    fi
+  fi
+
+done
+
+exit 0

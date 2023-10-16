@@ -1,0 +1,162 @@
+import re
+import sys
+import logging
+import crack
+from libhashman.config import *
+
+
+# check if a set of characters represents our definition of string
+def is_string( mystr, allownull=False, allowaccented=False, extra='' ):
+
+    extrachars = extra
+
+    if ( mystr is None ):
+        return False
+
+    if ( mystr == '' ):
+        if ( allownull ):
+            return True
+        else:
+            return False
+
+    if ( allowaccented ):
+        extrachars += ACCENTED
+
+    if ( set( mystr ) <= set( WHITELIST + extrachars ) ):
+        return True
+    else:
+        return False
+
+
+# check if the given username matches the convention defined by the regular expression
+def is_username(username):
+    pattern = r'^((::)?[a-z]\w*)*((::)?[a-z_]\w*)$'
+    if re.match(pattern, username):
+        return True
+    else:
+        return False
+
+
+def is_cname( mystr ):
+
+    if ( mystr is None ):
+        return False
+    mynames = mystr.split(' ')
+    for name in mynames:
+        if ( not is_string(name, False, True) ):
+            return False
+
+    return True
+
+
+# check if a set of characters represents our definition of email
+def is_email( mystr ):
+
+    if ( mystr is None ):
+        return False
+
+    try:
+        parts = mystr.split('@')
+
+        if ( len(parts) < 2 ):
+            return False
+
+        mailbox = parts[0]
+        domain = parts[1]
+        domaincomps = domain.split('.')
+
+        if ( len(domaincomps) < 2 ):
+            return False
+
+        # some emails addresses actually use "_"
+        if ( not is_string(mailbox, False, False, '_') ):
+            return False
+
+        for c in domaincomps:
+            # some domain names actually use "-"
+            # probably not supported on the top level component
+            # but let us keep the code simple
+            if ( not is_string(c, False, False, '-' ) ):
+                return False
+
+        return True
+
+    except Exception as exception:
+        print('Exception caught: %s' % str(exception))
+        return False
+
+
+# checks wether the strings chars are acceptable - size range and no funny characters
+def checkstr( mystr, whitelist ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    if ( len( mystr ) < MINSTR):
+        return False
+    if ( len( mystr ) > MAXSTR):
+        return False
+
+    if ( set( mystr ) <= set( whitelist ) ):
+        return True
+    else:
+        return False
+
+    return False
+
+
+def checkstr_usr( mystr ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    return ( len(mystr) <= MAXUSR and checkstr( mystr, WHITELIST_USR ) and is_username(mystr) )
+
+
+def checkstr_pwd( mystr ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    return checkstr( mystr , WHITELIST_PWD )
+
+
+def checkstr_b64( mystr ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    return checkstr( mystr , WHITELIST_B64 )
+
+
+# checks password complexity
+def checkpw( password, forcerelax=False ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    try:
+        # three simple criteria, the whitelist is checked in checkstr_pwd
+        crit1 = ( len(password) >= MINPASSWORDLEN )
+        crit2 = bool( set(password) & set(SYMBOLS) )
+        crit3 = bool( set(password) & set(NUMBERS) )
+        if ( RELAXPASSWORD is not True and forcerelax is not True ):
+            crit4 = bool( set(password) & set(UPPERCASE) )
+            crit5 = bool( set(password) & set(LOWERCASE) )
+        else:
+            crit4 = bool( set(password) & set(LETTERS) )
+            crit5 = True
+
+        return ( crit1 and crit2 and crit3 and crit4 and crit5 )
+
+    except Exception as exceptione:
+        logging.info('password ' + str(exception))
+        return False
+
+    return False
+
+
+# checks password complexity - the more demanding method
+def checkpw_fascist( password ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    try:
+        # raises exception
+        crack.VeryFascistCheck( password )
+        return True
+
+    except Exception as exception:
+        logging.info('password ' + str(exception))
+        return False
+
+    return False

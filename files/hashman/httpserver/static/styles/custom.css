@@ -1,0 +1,59 @@
+.scale-down {
+    transform: scale(0.8);
+}
+
+.divider {
+  border: 0;
+  height: 1px;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* Basic CSS alerts */
+.container {
+    max-width: 600px;
+}
+
+/* Simple CSS alerts */
+.alert {
+    /* Assuming some default values for these */
+    --font-size: 1em;
+    --spacing: 1em;
+    --form-element-spacing-vertical: 1em;
+    --form-element-spacing-horizontal: 1em;
+    --border-radius: 1em;
+    --color: #000;
+    --background-color: #fff;
+
+    margin-bottom: -1em;
+    padding: 1em;
+    border-radius: var(--border-radius);
+    color: var(--color);
+    background-color: var(--background-color);
+    border: 1px solid var(--background-color);
+
+    /* For flex layout */
+    display: flex;
+    align-items: center;
+    gap: 1em; /* space between icon and text */
+}
+
+.alert-success {
+    --background-color: #e8f5e9;
+    --color: #1b5e20;
+}
+
+.alert-success .icon {
+    width: calc(var(--font-size) * 5); /* adjust size as needed */
+    height: calc(var(--font-size) * 5); /* adjust size as needed */
+}
+
+.alert-success h1 {
+    margin: 0; /* remove default margin */
+    color: #094f03; !important;
+}
+
+.alert-success p {
+    margin: 0; /* remove default margin */
+    color: #094f03; !important;
+}

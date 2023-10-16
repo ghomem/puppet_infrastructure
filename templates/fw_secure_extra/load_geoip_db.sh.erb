@@ -1,0 +1,4 @@
+#!/bin/bash
+
+rm -rf /usr/share/xt_geoip/{LE,BE}
+/usr/lib/xtables-addons/xt_geoip_build -D /usr/share/xt_geoip <%= @csv_db %>

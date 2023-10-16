@@ -1,0 +1,398 @@
+<html>
+<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="viewport" content="width=device-width; initial-scale=1.0; maximum-scale=1.0;">
+<title>Notify</title>
+
+<style type="text/css">
+
+div, p, a, li, td { -webkit-text-size-adjust:none; }
+
+*{
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+}
+
+.ReadMsgBody
+{width: 100%; background-color: #ffffff;}
+.ExternalClass
+{width: 100%; background-color: #ffffff;}
+body{width: 100%; height: 100%; background-color: #ffffff; margin:0; padding:0; -webkit-font-smoothing: antialiased;}
+html{width: 100%; background-color: #ffffff;}
+
+p {padding: 0!important; margin-top: 0!important; margin-right: 0!important; margin-bottom: 0!important; margin-left: 0!important; }
+
+.hover:hover {opacity:0.85;filter:alpha(opacity=85);}
+
+.image77 img {width: 77px; height: auto;}
+.avatar125 img {width: 125px; height: auto;}
+.icon61 img {width: 61px; height: auto;}
+.logo img {width: 75px; height: auto;}
+.icon18 img {width: 18px; height: auto;}
+
+</style>
+
+<!-- @media only screen and (max-width: 640px) 
+		   {*/
+		   -->
+<style type="text/css"> @media only screen and (max-width: 640px){
+		body{width:auto!important;}
+		table[class=full2] {width: 100%!important; clear: both; }
+		table[class=mobile2] {width: 100%!important; padding-left: 20px; padding-right: 20px; clear: both; }
+		table[class=fullCenter2] {width: 100%!important; text-align: center!important; clear: both; }
+		td[class=fullCenter2] {width: 100%!important; text-align: center!important; clear: both; }
+		td[class=pad15] {width: 100%!important; padding-left: 15px; padding-right: 15px; clear: both;}
+		
+} </style>
+<!--
+
+@media only screen and (max-width: 479px) 
+		   {
+		   -->
+<style type="text/css"> @media only screen and (max-width: 479px){
+		body{width:auto!important;}
+		table[class=full2] {width: 100%!important; clear: both; }
+		table[class=mobile2] {width: 100%!important; padding-left: 20px; padding-right: 20px; clear: both; }
+		table[class=fullCenter2] {width: 100%!important; text-align: center!important; clear: both; }
+		td[class=fullCenter2] {width: 100%!important; text-align: center!important; clear: both; }
+		table[class=full] {width: 100%!important; clear: both; }
+		table[class=mobile] {width: 100%!important; padding-left: 20px; padding-right: 20px; clear: both; }
+		table[class=fullCenter] {width: 100%!important; text-align: center!important; clear: both; }
+		td[class=fullCenter] {width: 100%!important; text-align: center!important; clear: both; }
+		td[class=pad15] {width: 100%!important; padding-left: 15px; padding-right: 15px; clear: both;}
+		.erase {display: none;}
+				
+		}
+} </style>
+
+<!-- Outlook table height bug - tested on 2013 -->
+<!--[if mso]>
+<style type="text/css">
+    table { font-size:1px; line-height:0; mso-margin-top-alt:1px; }
+</style>
+<![endif]-->
+
+</head>
+<body leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+
+
+<!-- Notification 1  -->
+<table width="100%" border="0" cellpadding="0" cellspacing="0" align="center" class="full" bgcolor="{{ BG_HEX_COLOR }}" style="background-color: {{ BG_RGB_COLOR }};">
+	<tr>
+		<td align="center" background-color: rgb(48, 48, 48); >
+		
+		
+			<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" object="drag-module-small">
+ 				<tr>
+					<td width="{{ INNERWIDTH }}" valign="middle" align="center">
+						<table width="{{ INNERWIDTH2 }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+							<tr>
+								<td width="100%" height="25"></td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+			</table>	
+			<!-- Mobile Wrapper -->
+			<table width="100%" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" object="drag-module-small">
+				<tr>
+					<td width="100%" align="center">
+						
+						<div class="sortable_inner ui-sortable">
+						
+						<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" object="drag-module-small">
+							<tr>
+								<td width="{{ INNERWIDTH }}" valign="middle">
+								
+									<table width="{{ INNERWIDTH2 }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+                                                                        <tr> <td width="100%" height="60" align="left"><img src="{{ LOGO }}/static/img/logo-email.png"> </td></tr>
+									</table>
+																	
+								</td>
+							</tr>
+						</table>
+						</div>
+						
+					</td>
+				</tr>
+			</table>
+			
+			<table width="{{ OUTERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="full">
+				<tr>
+					<td align="center" width="20" valign="middle"></td>
+					<td align="center" width="{{ INNERWIDTH }}" valign="middle">
+			
+						<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="full">
+							<tr>
+								<td align="center" width="{{ INNERWIDTH }}" valign="middle" bgcolor="{{ LIGHT_HEX_COLOR }}"style="background-color: {{ LIGHT_RGB_COLOR }};">
+								
+									<div class="sortable_inner ui-sortable">
+						
+									<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" bgcolor="{{ LIGHT_HEX_COLOR }}"object="drag-module-small" style="background-color: {{ LIGHT_RGB_COLOR }};">
+										<tr>
+											<td width="{{ INNERWIDTH }}" valign="middle" align="center">
+											
+												<table width="{{ INNERWIDTH2 }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+												</table>							
+											</td>
+										</tr>
+									</table>
+									<!-- Start Top -->
+									<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" bgcolor="HEX_COLOR"object="drag-module-small" style="background-color: {{ RGB_COLOR }};">
+										<tr>
+											<td width="{{ INNERWIDTH }}" valign="middle" align="center">
+												
+												<!-- Header Text --> 
+												<table width="300" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+                                                                                                        <!-- Separator line with Outlook bug workaround -->
+													<tr style="font-size:1px; line-height:0; -webkit-text-size-adjust:none;"  >
+														<td width="100%" height="1" > &nbsp; </td>
+													</tr>
+												</table>
+													
+											</td>
+										</tr>
+									</table><!-- End Top -->
+																	
+									<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" bgcolor="{{ HEX_COLOR }}"object="drag-module-small" style="background-color: {{ RGB_COLOR }};">
+										<tr>
+											<td width="{{ INNERWIDTH }}" valign="middle" align="center">
+											
+												<table width="{{ INNERWIDTH2 }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+													<tr>
+                                                                                                                <!-- Padding if needed -->
+														<td width="100%" height="1"></td>
+													</tr>
+												</table>							
+											</td>
+										</tr>
+									</table>
+									
+									</div>
+									
+								</td>
+							</tr>
+						</table>
+						
+					</td>
+					<td align="center" width="20" valign="middle"></td>
+				</tr>
+			</table>
+			
+			<table width="{{ OUTERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="full">
+				<tr>
+					<td align="center" width="{{ INNERWIDTH }}" valign="middle">
+			
+						<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="full">
+							<tr>
+								<td align="center" width="{{ INNERWIDTH }}" valign="middle" bgcolor="#ffffff"<div="" class="sortable_inner ui-sortable" style="background-color: rgb(255, 255, 255);">
+									
+									<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" bgcolor="#ffffff"object="drag-module-small" style="background-color: rgb(255, 255, 255);">
+										<tr>
+											<td width="{{ INNERWIDTH }}" valign="middle" align="center">
+											
+												<table width="{{ INNERWIDTH2 }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+													<tr>
+                                                                                                                <!-- white part below green strip -->
+														<td width="100%" height="{{ PADDING }}"></td>
+													</tr>
+												</table>							
+											</td>
+										</tr>
+									</table>
+									
+									<!-- Start Second -->
+									<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" bgcolor="#ffffff"object="drag-module-small" style="background-color: rgb(255, 255, 255);">
+										<tr>
+											<td width="{{ INNERWIDTH }}" valign="middle" align="center">
+												
+												<!-- Header Text --> 
+												<table width="{{ INNERWIDTH2 }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+													<tr>
+														<td align="center" valign="middle" width="100%" style="text-align: center; font-family: Helvetica, Arial, sans-serif; font-size: 14px; color: rgb(81, 81, 81); line-height: 32px; font-weight: normal;"class="fullCenter" >
+															<!--[if !mso]><!--><span style="font-family: 'proxima_novathin', Helvetica; font-weight: normal;"><!--<![endif]-->Dear {{ RECEIVER }}, <!--[if !mso]><!--></span><!--<![endif]-->
+														</td>
+													</tr>
+												</table>
+											</td>
+										</tr>
+									</table>
+									
+									<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" bgcolor="#ffffff"object="drag-module-small" style="background-color: rgb(255, 255, 255);">
+										<tr>
+											<td width="{{ INNERWIDTH }}" valign="middle" align="center">
+											
+												<table width="{{ INNERWIDTH2 }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+													<tr>
+														<td width="100%" height="5"></td>
+													</tr>
+												</table>							
+											</td>
+										</tr>
+									</table>
+									
+									<!-- Start Second -->
+									<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" bgcolor="#ffffff"object="drag-module-small" style="background-color: rgb(255, 255, 255);">
+										<tr>
+											<td width="{{ INNERWIDTH }}" valign="middle" align="center">
+												
+												<!-- Header Text --> 
+												<table width="{{ INNERWIDTH2 }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+													<tr>
+														<td valign="middle" width="100%" style="text-align: center; font-family: Helvetica, Arial, sans-serif; font-size: 14px; color: rgb(81, 81, 81); line-height: 24px;"class="fullCenter" >
+															<!--[if !mso]><!--><span style="font-family: 'proxima_nova_rgregular', Helvetica; font-weight: normal;"><!--<![endif]-->{{ TEXT }}<!--[if !mso]><!--></span><!--<![endif]-->
+														</td>
+													</tr>
+												</table>
+											</td>
+										</tr>
+									</table>
+									
+									<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" bgcolor="#ffffff"object="drag-module-small" style="background-color: rgb(255, 255, 255);">
+										<tr>
+											<td width="{{ INNERWIDTH }}" valign="middle" align="center">
+											
+												<table width="{{ FILEWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+													<tr>
+														<td width="100%" height="{{ PADDING }}"></td>
+													</tr>
+												</table>							
+											</td>
+										</tr>
+									</table>
+									
+									<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" bgcolor="#ffffff"object="drag-module-small" style="background-color: rgb(255, 255, 255);">
+										<tr>
+											<td width="{{ INNERWIDTH }}" valign="middle" align="center">
+											
+												<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+													<tr>
+														<td width="{{ INNERWIDTH }}" height="1"></td>
+													</tr>
+													<!-- Button Center -->
+													<tr>
+														<td>
+															<table width="{{ FILEWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="fullCenter"> 
+																<tr> 
+                                                                                                                                        <!-- needed extra font-size attribute to overcome the default css for tables defined on head for MSO bug -->
+                                                                                                                                        <!-- needed also line-height and bottom padding -->
+																	<td width="{{ FILEWIDTH }}" align="center" valign="middle" height="{{ FILEHEIGHT }}" bgcolor="{{ HEX_COLOR }}" style="padding-left: 22px; padding-right: 22px; padding-bottom: {{ PADDING_MSO_BUG }}px; font-size:16px; line-height: {{ FILEHEIGHT }}px; -webkit-text-size-adjust:none; font-family: Helvetica, Arial, sans-serif; color: rgb(255, 255, 255); text-transform: uppercase; background-color: {{ RGB_COLOR }};">
+																		<span style="font-family: 'proxima_novablack', Helvetica; font-weight: normal;">
+                                                                                                                                                        <a href="{{ URL }}" style="color: rgb(255, 255, 255); font-size: 16px; text-decoration: none; line-height: {{ FILEHEIGHT }}px; width: 100%;">{{ BUTTONTEXT }}</a>
+                                                                                                                                                </span>
+																	</td> 
+																</tr> 
+															</table> 
+														</td>
+													</tr>
+													<!-- End Button Center -->
+												</table>
+																				
+											</td>
+										</tr>
+									</table>
+									
+									<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" bgcolor="#ffffff"object="drag-module-small" style="background-color: rgb(255, 255, 255);">
+										<tr>
+											<td width="{{ INNERWIDTH }}" valign="middle" align="center">
+											
+												<table width="{{ INNERWIDTH2 }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+													<tr>
+														<td width="100%" height="25"></td>
+													</tr>
+												</table>							
+											</td>
+										</tr>
+									</table><!-- End Second -->
+									
+								
+						
+								</td>
+							</tr>
+						</table>
+						
+					</td>
+				</tr>
+			</table>
+			
+			<!-- Mobile Wrapper -->
+			<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile">
+				<tr>
+					<td width="{{ INNERWIDTH }}" align="center">
+					
+						<div class="sortable_inner ui-sortable">
+						
+						<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" object="drag-module-small">
+							<tr>
+								<td width="{{ INNERWIDTH }}" valign="middle" align="center">
+								
+									<table width="{{ INNERWIDTH2 }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+										<tr>
+											<td width="100%" height="10"></td>
+										</tr>
+									</table>							
+								</td>
+							</tr>
+						</table>
+						
+						<!-- CopyRight -->
+						<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="full" object="drag-module-small">
+							<tr>
+								<td align="center" valign="middle" width="{{ INNERWIDTH }}" style="text-align: center; font-family: Helvetica, Arial, sans-serif; font-size: 13px; color: rgb(149, 149, 149); line-height: 24px;"class="fullCenter" >
+								
+									
+									<!--[if !mso]><!--><span style="font-family: 'proxima_nova_rgregular', Helvetica; font-weight: normal;"><!--<![endif]-->
+									
+									{{ COMPANY }}<!--[if !mso]><!--></span><!--<![endif]-->
+									
+									<!--[if !mso]><!--><span style="font-family: 'proxima_nova_rgregular', Helvetica;"><!--<![endif]-->
+									
+									<!--[if !mso]><!--></span><!--<![endif]-->
+									
+									
+									
+								</td>
+							</tr>
+						</table><!-- End CopyRight -->
+						
+						<table width="{{ INNERWIDTH }}" border="0" cellpadding="0" cellspacing="0" align="center" class="mobile" object="drag-module-small">
+							<tr>
+								<td align="center" width="{{ INNERWIDTH }}" valign="middle">
+								
+									<table width="{{ INNERWIDTH2 }}" border="0" cellpadding="0" cellspacing="0" align="center" style="text-align: center; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;" class="fullCenter">
+										<tr>
+											<td width="100%" height="15"></td>
+										</tr>
+										<tr>
+											<td width="100%" height="1" style="font-size: 1px; line-height: 1px;">&nbsp;</td>
+										</tr>
+									</table>							
+								</td>
+							</tr>
+						</table>
+						</div>
+			
+					</td>
+				</tr>
+			</table>
+			
+		</div>
+		</td>
+	</tr>
+</table><!-- End Notification 1 -->
+
+<!-- Notification 2  -->
+<div style="display: none;" id="element_014856350841000676"></div><!-- End Notification 2 -->
+
+<!-- Notification 3 -->
+<div style="display: none" id="element_08709477428346872"></div><!-- End Notification 3 -->
+
+<!-- Notification 4  -->
+<div style="display: none" id="element_0068720095558092"></div><!-- End Notification 4 -->
+
+<!-- Notification 5 -->
+<div style="display: none" id="element_07530045635066926"></div><!-- End Notification 5 -->
+
+<!-- Notification 6 -->
+<div style="display: none" id="element_05104431335348636"></div><!-- End Notification 6 -->
+</div>
+</body></html>	<style>body{ background: none !important; } </style>

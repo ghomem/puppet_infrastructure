@@ -1,0 +1,17 @@
+#!/bin/bash
+
+CERT_DIR=<%= @certificatesdir %>
+SSL_DIR=<%= @ssldir %>
+DOMAINS="<%= @domains_str %>"
+
+for DOMAIN in ${DOMAINS[@]}; do
+    # fill with the list of certificates we are maintaning
+    CERT_LIST=($(find $CERT_DIR/ -type d -name "*${DOMAIN}" -exec basename {} \;))
+
+    for CERT_NAME in ${CERT_LIST[@]}; do
+        cp -f $CERT_DIR/$CERT_NAME/privkey.pem $SSL_DIR/$CERT_NAME-key.pem
+        cp -f $CERT_DIR/$CERT_NAME/cert.pem $SSL_DIR/$CERT_NAME.pem
+        cp -f $CERT_DIR/$CERT_NAME/chain.pem $SSL_DIR/$CERT_NAME-chain.pem
+        chown puppet:puppet $SSL_DIR/${CERT_NAME}*.pem
+    done
+done

@@ -1,0 +1,29 @@
+[connection]
+id=<%= @connection_name %>
+uuid=<%= @uuid %>
+type=vpn
+permissions=user:<%= @local_username %>:;
+secondaries=
+
+[vpn]
+remote-random=no
+connection-type=password
+password-flags=1
+remote=<%= @remote %>
+cipher=<%= @cipher %>
+comp-lzo=yes
+proto-tcp=no
+mssfix=no
+dev-type=tap
+username=<%= @vpn_username %>
+ca=<%= @ca_crt %>
+service-type=org.freedesktop.NetworkManager.openvpn
+
+[ipv4]
+dns-search=
+method=auto
+
+[ipv6]
+addr-gen-mode=stable-privacy
+dns-search=
+method=auto

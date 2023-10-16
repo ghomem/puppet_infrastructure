@@ -1,0 +1,448 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+
+import sys
+import re
+import logging
+import random
+import base64
+import hashlib
+import json
+import io
+
+# imports from separate utils file
+from hashman_utils import *
+from libhashman.switch import switch
+from libhashman.config import *
+from libhashman.coding import *
+from libhashman.typeutils import *
+from libhashman.dbutils import *
+from libhashman.mailutils import *
+from libhashman.miscutils import *
+from libhashman.interface import *
+
+
+# test functions, not advertised but can be called via CLI
+def test_XXX(silent=False):
+
+    logging.info('starting tests')
+
+    logging.info('test string validation functions')
+    assert ( is_string('' , True ) is True )
+    assert ( is_string('' , False ) is False )
+    assert ( is_string('' ) is False )
+    assert ( is_string('onestring' ) is True )
+    assert ( is_string('one string' ) is False )
+    assert ( is_string('one-string', False, False, '-' ) is True )
+
+    assert ( is_email('xxx@domain.com') is True )
+    assert ( is_email('xxx.yyy@domain.com') is True )
+    assert ( is_email('xxx_yyy@domain.com') is True )
+    assert ( is_email('xxx@dom-ain.com') is True )
+    assert ( is_email('xxx@yyy') is False )
+    assert ( is_email('xxxyyy') is False )
+    assert ( is_email('xxx.yy"#y@domain.com') is False )
+    assert ( is_email('xxx.yyy@zzz@domain.com') is False )
+    assert ( is_email('Xxx Yyy') is False )
+    assert ( is_email(None) is False )
+    assert ( is_cname('Xxx Yyy') is True )
+    assert ( is_cname('Xxx') is True )
+    assert ( is_cname('Xxx Yyy Zzz') is True )
+    assert ( is_cname(None) is False )
+    assert ( is_username('testuser1234') is True )
+    assert ( is_username('TestUser1234') is False )
+
+    assert ( encode_to_entity('çã') == '&ccedil;&atilde;' )
+
+    # generate a random username
+    logging.info('generate a random username')
+    usr_base  = 'testuser'
+    usr_extra = mkstr(PASSWORDLEN)
+    username  = usr_base + usr_extra
+    password  = 'Lisboa.123!padding'  # do not change, related to ecryptfs stuff
+    password2 = mkpasswd(PASSWORDLEN)
+    email     = usr_base + '_' + usr_extra + '@' + 'localhost.localdomain'
+    name      = username + ' Encarnação da Silva'
+    company   = 'demo'
+    pubkey    = 'AAAAB3NzaC1yc2EAAAADAQABAAABAQDANQg5bUEYVFinxlrSemrr0DBs6BPhb1x1bVwvCbHWHgxA7V0YPHgP7WJvMkihJDCMJbJFdK2pvj9wsckCNJDtV1IhMgzvpM3A1qxd4eUqmYTownYLkd/X+ZeTi7BoD3rXlIS3cS6j8WF7+iVrwlvdcGqVyn1lJPQrjEhbXi8fxMGV9uoZmh3n0pugT6JB5y6O+hR4deH5REoo9fS/t6t8kwCet7qZtfMmXzNV49HN+5BW6PUFP68NCJ2zLDJSaTQ4auGZ5CyHDpazqXhZEK0fsu0WyFmB9dDmzaAg66zhd+0q8CBPVrldwTUqwF7jJtrRNZjHAPbLJMd+fAp3bMYL'
+    ppsigs    = 'NWY0ZGVlMzBjZGMzYjNmNQpiZjljYzZjZjI4ZTU4NTgzCg=='
+    ppwrapped = 'OgK5f6osEG7szmQ4NzFjZDVjYjZlMjFjMTfYAAJ8i6HFhH8gbY8CHvCrhBtK3Ddf98T7ZbFga3rpxg=='
+    smbhash   = 'I/h62t+BlQBVwaOjkKyyig=='
+
+    # check our own generated parameters
+    logging.info('check random user parameters')
+    assert ( is_email( email ) is True )
+    assert ( is_cname( name ) is True )
+    assert ( is_username( username ) is True )
+
+    # check passwords
+    logging.info('check passwords')
+    mypass = 'abcde'
+    assert ( checkpw(mypass) is False )
+    mypass = 'Porto.2!pppaddding'
+    assert ( checkpw(mypass) is True )
+    # including one automatically generated password
+    assert ( checkpw(password2) is True )
+
+    # this weaker password should validate only with relaxed rules (no UPPERCASE chars)
+    # this test uses relaxed rules regardless of the global RELAXPASSWORD variable
+    mypass = 'porto.2!pppaddding'
+    if ( RELAXPASSWORD is True ):
+        assert ( checkpw(mypass) is True )
+    else:
+        assert ( checkpw(mypass, True) is True )
+        assert ( checkpw(mypass) is False )
+
+    # the password used for the test user should validate too
+    assert ( checkpw(password) is True )
+
+    # list users before creation
+    logging.info('list users before user creation')
+    assert ( listusers() == E_OK )
+
+    # create a user
+    logging.info('creating user')
+    rndpass = mkpasswd(PASSWORDLEN)
+    assert ( useradd( username, rndpass, email, name, company, mailnotif=(not silent) ) == E_OK)
+
+    # create a user with a wrong username and see if it fails
+    logging.info('creating user with wrong username')
+    wrong_username = 'TestUser987650o'
+    assert ( useradd( wrong_username, rndpass, email, name, company, mailnotif=(not silent) ) == E_ERR)
+
+    # list users after creation
+    logging.info('list users after user creation')
+    assert ( listusers() == E_OK )
+    # find user index
+    logging.info('check password of user created')
+    assert ( getpw(username) is not None )
+    logging.info('check smbhash of user created')
+    assert ( getsmbhash(username) is not None )
+    assert ( is_email( getemail(username) ) is True )
+    assert ( is_cname( getcname(username) ) is True )
+    assert ( getcompany(username) is not None )
+    # default values for ecrypt stuff and ssh key
+    logging.info('check default values user created')
+    assert ( getppsigs(username ) == '')
+    assert ( getppwrapped(username ) == '')
+    assert ( getpubkey(username ) == '')
+    assert ( getppsigs(username ) == '')
+    # try to create again - should fail
+    logging.info('try to re-create user, it should fail')
+    assert ( useradd( username, rndpass, email, name, company ) == E_ERR)
+    # check that the user is initially locked
+    logging.info('check that the user is initialy locked')
+    assert ( is_locked(username) is True )
+    # check that the user is initially expired
+    logging.info('check that the user is initialy expired')
+    assert ( is_expired(username) is True )
+    # a locked and expired user must have its Samba hash locked
+    logging.info('check that the user have its Samba hash locked')
+    assert ( getsmbhash(username).startswith(LOCKPREFIX) )
+    # unlock the user
+    logging.info('unlock user')
+    assert ( unlockpw(username) == E_OK )
+    # unlocked but expired user must have its Samba hash locked
+    logging.info('check that the user still have its Samba hash locked')
+    assert ( getsmbhash(username).startswith(LOCKPREFIX) )
+    # unexpire the user
+    logging.info('unexpire the user')
+    assert ( unexpirepw(username) == E_OK )
+    # an unlocked and unexpired user must have its Samba hash unlocked
+    logging.info('check that the user have now its Samba hash unlocked')
+    assert ( not getsmbhash(username).startswith(LOCKPREFIX) )
+    # lock the user
+    logging.info('lock the user')
+    assert ( lockpw(username) == E_OK )
+    # a unexpired but locked user must have its Samba hash locked
+    logging.info('check that the user have its Samba hash locked again')
+    assert ( getsmbhash(username).startswith(LOCKPREFIX) )
+    # unlock but expire the user
+    logging.info('unlock and expire the user')
+    assert ( unlockpw(username) == E_OK )
+    assert ( expirepw(username) == E_OK )
+    # check if it is really unlocked
+    logging.info('check if it is really unlocked')
+    assert ( is_locked(username) is False )
+    # list users after unlock
+    logging.info('list users after unlock')
+    assert ( listusers() == E_OK )
+    # try to unlock again
+    logging.info('try to unlock again')
+    assert ( unlockpw(username) == E_ERR )
+    # auth against the user a wrong but compliant pass
+    logging.info('auth against the user a wrong but compliant pass')
+    wrongpass = mkpasswd(PASSWORDLEN)
+    assert ( auth(username, wrongpass) == E_ERR )
+
+    # set pass, unlocks and unexpires the user
+    logging.info('set the password for the user and unlock it')
+    assert ( setpw(username, password) == E_OK )
+    # check that the user is not expired anymore
+    logging.info('ensure that the user is unexpired')
+    assert ( is_expired(username) is False )
+
+    # list users after setpw
+    logging.info('list the users after setting the password')
+    assert ( listusers() == E_OK )
+
+    # set ecryptfs fields
+    logging.info('set the ecryptfs fields for the user')
+    assert ( setecryptfs( username, ppsigs, ppwrapped ) == E_OK )
+    # set public key
+    logging.info('set the ssh public key for the user')
+    assert ( setpubkey( username, pubkey ) == E_OK )
+
+    # clear public key and check
+    logging.info('clear the public key and check that it has been removed')
+    assert ( unsetpubkey( username ) == E_OK )
+    assert ( getpubkey( username ) == '')
+
+    # set public key again
+    logging.info('set public key again')
+    assert ( setpubkey( username, pubkey ) == E_OK )
+
+    # clear ecryptfs params and check
+    logging.info('clear ecryptfs params and check that they have been removed')
+    assert ( unsetecryptfs( username ) == E_OK )
+    assert ( getppsigs( username ) == '')
+    assert ( getppwrapped( username ) == '')
+
+    # set ecryptfs fields
+    logging.info('set the ecryptfs fields again')
+    assert ( setecryptfs( username, ppsigs, ppwrapped ) == E_OK )
+
+    # get ecryptfs fields
+    logging.info('get ecryptfs fields')
+    pps = getppsigs( username )
+    assert ( pps == ppsigs )
+    ppw = getppwrapped( username )
+    assert ( ppw == ppwrapped )
+    # get public key
+    logging.info('get public key')
+    pk = getpubkey( username )
+    assert ( pk == pubkey )
+
+    # set the user email, company and common name to something else
+    logging.info('set different email, company and common name for the user')
+    assert (   setemail( username, 'dummyuser@dummy.io' )  == E_OK )
+    assert ( setcompany( username, 'Dummy Corp Ltd' )      == E_OK )
+    assert (   setcname( username, 'Frank Einstein' )      == E_OK )
+
+    logging.info('list users after the changes')
+    assert ( listusers() == E_OK )
+
+    # revert
+    logging.info('revert the changes done')
+    assert (   setemail( username, email)         == E_OK )
+    assert ( setcompany( username, company )      == E_OK )
+    assert (   setcname( username, name )         == E_OK )
+
+    logging.info('list users after reverting the changes')
+    assert ( listusers() == E_OK )
+
+    # sets the password providing also the old one incorrectly
+    logging.info('try to set the password and provide the old one incorrectly')
+    wrongpass = mkpasswd(PASSWORDLEN)
+    setpw(username, password2, False, wrongpass)
+    assert ( setpw(username, password2, False, wrongpass) == E_ERR )
+    # sets a new password providing also the old one correctly, this will update ecryptfs stuff
+    logging.info('try to set the password and provide the old one correctly this time')
+    assert ( setpw(username, password2, False, password) == E_OK )
+    # check that it auths correctly
+    logging.info('check that the user atuthenticates correctly after the changes')
+    assert ( auth(username, password2) == E_OK )
+
+    # check the the ecryptfs wrapped passphrase has changed
+    logging.info('check that the ecryptfs wrapped passphrase has changed')
+    pps2 = getppsigs( username )
+
+    # the signature does NOT change it seems
+    # assert ( pps2 != ppsigs )
+
+    # checked that the wrapped passphrase remains the same
+    logging.info('check that the wrapped passphrase remains the same')
+    ppw2 = getppwrapped( username )
+    assert ( getpp( ppwrapped, password )[0] == getpp( ppw2, password2 )[0] )
+
+    # going back our preferred password providing the previous one
+    logging.info('go back to our prefered password providing the old one correctly')
+    assert ( setpw(username, password, False, password2) == E_OK )
+    # check that it auths correctly
+    logging.info('check that it authenticates correctly after the changes')
+    assert ( auth(username, password) == E_OK )
+
+    # check the the ecryptfs wrapped passphrase has changed again ...
+    # not necessarily to ppw because there is salt involved
+    logging.info('check that the ecryptfs wrapped passphrase has changed again, not necessarily to ppw because there is salt involved')
+    ppw3 = getppwrapped( username )
+    assert ( ppw3 != ppw2 )
+
+    # check that the unwrapped passphrases still match
+    logging.info('check that the unwrapped passphrase still matches')
+    assert ( getpp( ppwrapped, password )[0] == getpp( ppw3, password )[0] )
+
+    # expire the user
+    logging.info('expire the user')
+    assert ( expirepw(username) == E_OK )
+    # check that it became expired
+    logging.info('check that it became expired')
+    assert ( is_expired(username) is True )
+    # try to expire again
+    logging.info('ensure that it fails when we try to expire again')
+    assert ( expirepw(username) == E_ERR )
+    # auth with the right pass - user expired
+    logging.info('try to auth with the right password - user expired')
+    assert ( auth(username, password) == E_OK )
+    # unexpire the user
+    logging.info('unexpire the user')
+    assert ( unexpirepw(username) == E_OK )
+    # check that it became unexpired
+    logging.info('check that it became unexpired')
+    assert ( is_expired(username) is False )
+    # try to unexpire again
+    logging.info('try to unexpire the user again')
+    assert ( unexpirepw(username) == E_ERR )
+    # lock the user
+    logging.info('lock the user')
+    assert ( lockpw(username) == E_OK )
+    # check that it became locked
+    logging.info('check that the user became locked')
+    assert ( is_locked(username) is True )
+    # try to lock again
+    logging.info('try to lock again')
+    assert ( lockpw(username) == E_ERR )
+    # auth with the right pass - user locked
+    logging.info('try to auth with the right pass - user locked')
+    assert ( auth(username, password) == E_ERR )
+
+    # export the user
+    logging.info('export the user')
+    stdout_ = sys.stdout  # backup the original stdout
+    stream = io.StringIO()
+    sys.stdout = stream
+    rc = mk_info_export(username, True)
+    sys.stdout = stdout_  # restore the previous stdout.
+    json_b64_userdata = stream.getvalue()  # and here we have the output from mk_info_export
+
+    # check that the parameters from the export are correct
+    logging.info('check that the parameters from the export are correct')
+    json_userdata = base64.b64decode(json_b64_userdata)
+    userdata = json.loads(json_userdata)
+    assert ( rc  == E_OK )
+
+    username_i  = userdata[0][1]
+    company_i   = userdata[1][1]
+    email_i     = userdata[2][1]
+    pwentry_i   = userdata[3][1]
+    name_i      = userdata[4][1]
+    ppsigs_i    = userdata[5][1]
+    ppwrapped_i = userdata[6][1]
+    smbentry_i  = userdata[7][1]
+    pubkey_i    = userdata[8][1]
+
+    assert ( username_i  == username             )
+    assert ( company_i   == company              )
+    assert ( email_i     == email                )
+    assert ( pwentry_i   == getpw(username)      )
+    assert ( smbentry_i  == getsmbhash(username) )
+    assert ( name_i      == name                 )
+    assert ( pubkey_i    == pubkey               )
+    assert ( ppsigs_i    == ppsigs               )
+    # note that we changed the original ppwrapped during tests
+    assert ( ppwrapped_i == ppw3            )
+
+    # delete the user
+    logging.info('delete the user')
+    assert ( userdel(username) == E_OK )
+    # import the user
+    logging.info('import the user')
+    assert ( useradd_import( username, json_b64_userdata ) == E_OK )
+
+    # check that the parameters after import are correct
+    logging.info('check that the parameters after import are correct')
+    assert ( company_i   == getcompany(username)  )
+    assert ( email_i     == getemail(username)    )
+    assert ( pwentry_i   == getpw(username)       )
+    assert ( name_i      == getcname(username)    )
+    assert ( pubkey_i    == getpubkey(username)   )
+    assert ( ppsigs_i    == getppsigs(username)   )
+    # note that we changed the original ppwrapped during tests
+    assert ( ppwrapped_i == getppwrapped(username) )
+
+    # list users
+    logging.info('list users after operations')
+    assert ( listusers() == E_OK )
+    # export the user again and check the export userdata is the same
+    logging.info('export the user again and check that the export userdata is the same')
+    stdout_ = sys.stdout  # backup the original stdout
+    stream = io.StringIO()
+    sys.stdout = stream
+    rc = mk_info_export(username, True)
+    assert ( rc  == E_OK )
+    sys.stdout = stdout_  # restore the previous stdout.
+    json_b64_userdata2 = stream.getvalue()  # and here we have the output from mk_info_export
+    json_userdata2 = base64.b64decode(json_b64_userdata2)
+    userdata2 = json.loads(json_userdata2)
+    assert ( userdata2 == userdata )
+
+    # auth should not work before unlock, should work after
+    logging.info('ensure that auth works only after unlocking the user')
+    assert ( auth(username, password) == E_ERR )
+    assert ( unlockpw(username) == E_OK )
+    assert ( auth(username, password) == E_OK )
+
+    # try to import the user knowing it already exists
+    logging.info('try to import the user knowing it already exists')
+    assert ( useradd_import( username, json_b64_userdata2 ) == E_ERR )
+
+    # remove the Samba hash entry to simulate old users without a generated hash
+    logging.info('remove the samba hash entry to simulate old users without a generated hash')
+    assert ( delent(username, DBFILE_SMB, SUFFIX_SMB) == E_OK )
+    # we're able to lock/unlock and expire/unexpire users without Samba hashes
+    logging.info('we are able to lock/unlock and expire/unexpire users without Samba hashes')
+    assert ( lockpw(username) == E_OK )
+    assert ( expirepw(username) == E_OK )
+    assert ( unlockpw(username) == E_OK )
+    assert ( unexpirepw(username) == E_OK )
+
+    # delete the user again
+    logging.info('delete the user again')
+    assert ( userdel(username) == E_OK )
+    # try to import the username with a username that does not match the userdata
+    logging.info('try to import the user with a username that does not match the userdata')
+    assert ( useradd_import( username + 'garbage' , json_b64_userdata2 ) == E_ERR )
+
+    # list users after deletion
+    logging.info('list users after deletion')
+    assert ( listusers() == E_OK )
+    # try to delete the user again
+    logging.info('try to delete the user again')
+    assert ( userdel(username) == E_ERR )
+
+    # we should not find any entry
+    logging.info('ensure that there is no entry of the user')
+    assert ( getpw(username) is None )
+    assert ( getemail(username) is None )
+    assert ( getcname(username) is None )
+    assert ( getcompany(username) is None )
+    assert ( getppsigs(username) is None )
+    assert ( getppwrapped(username) is None )
+    assert ( getpubkey(username) is None )
+
+    # try operations on the user which now does not exist
+    logging.info('try operations in the user which does not exist')
+    assert (       setpw(username, password, False, password2) == E_ERR )
+    assert (      lockpw(username)                             == E_ERR )
+    assert (    unlockpw(username)                             == E_ERR )
+    assert (    expirepw(username)                             == E_ERR )
+    assert (  unexpirepw(username)                             == E_ERR )
+    assert (    setemail(username, 'dummyuser@dummy.io' )      == E_ERR )
+    assert (  setcompany(username, 'Dummy Corp Ltd' )          == E_ERR )
+    assert (    setcname(username, 'Frank Einstein' )          == E_ERR )
+    assert ( setecryptfs(username, ppsigs, ppwrapped )         == E_ERR )
+    assert (   setpubkey(username, pubkey )                    == E_ERR )
+
+    logging.info('all tests passed, database will be restored!')
+
+    return E_OK

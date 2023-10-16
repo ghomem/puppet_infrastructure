@@ -1,0 +1,271 @@
+#!/usr/bin/python3
+# vim: expandtab ts=4
+
+import sys
+import argparse
+import xml.etree.ElementTree as ET
+
+PROC_MICROCODE_PACKAGES = ['amd64-microcode', 'intel-microcode']
+
+def is_kernel_package(bin_pkg_name):
+    """This function evaluates if a package is a kernel related package"""
+    return (bin_pkg_name.startswith('linux') or
+            bin_pkg_name in PROC_MICROCODE_PACKAGES)
+
+class Severity:
+
+    def __init__(self, severity_string, default_severity):
+        self._string = severity_string
+        if severity_string.lower() == 'over9000': # highest severity, for testing purposes
+            self._value = 9001
+        elif severity_string.lower() == 'critical':
+            self._value = 4
+        elif severity_string.lower() == 'high':
+            self._value = 3
+        elif severity_string.lower() == 'medium':
+            self._value = 2
+        elif severity_string.lower() == 'low':
+            self._value = 1
+        elif severity_string.lower() == 'negligible':
+            self._value = 0
+        elif severity_string.lower() == 'none':
+            self._value = Severity(default_severity, default_severity)._value
+        else:
+            raise Exception("Invalid priority %s" % severity_string)
+
+    def __ge__(self, other):
+        return self._value >= other._value
+
+    def __str__(self):
+        return(self._string)
+
+
+def main():
+
+    # Create argument parser
+    arg_parser = argparse.ArgumentParser()
+
+    # Argument parser options
+    arg_parser.description = "This program gives you a list of relevant packages to update to fix security issues"
+    arg_parser.add_argument("-if", "--input-file",
+                            required=True,
+                            help="The input XCCDF file")
+    arg_parser.add_argument("-of", "--output-file",
+                            required=False,
+                            help="The output file, it will provide one package name per line")
+    arg_parser.add_argument("-pt", "--priority-threshold",
+                            required=False,
+                            default='Medium',
+                            help="This program will consider only security issues with priority higher than this threshold")
+    arg_parser.add_argument("-dp", "--default-priority",
+                            required=False,
+                            default='Medium',
+                            help="This option will assign the given priority to security issues with unknown priority")
+    arg_parser.add_argument("-nk", "--no-kernel",
+                            dest='no_kernel',
+                            action='store_true',
+                            required=False,
+                            help="Do no not take into account kernel updates")
+    arg_parser.add_argument("-q", "--quiet",
+                            dest='quiet',
+                            action='store_true',
+                            required=False,
+                            help="Do no print results to stdout")
+    arg_parser.add_argument("-d", "--debug",
+                            dest='debug',
+                            action='store_true',
+                            required=False,
+                            help="Print extra debug messages to stdout")
+    args = arg_parser.parse_args()
+    input_file = args.input_file
+    output_file = args.output_file
+    quiet_output = args.quiet
+    debug_output = args.debug
+    prio_threshold = Severity(args.priority_threshold, args.default_priority)
+    no_kernel_updates = args.no_kernel
+
+    # Parse the XML file
+    try:
+        tree = ET.parse(input_file)
+        root = tree.getroot()
+    except Exception as exception:
+        print("Error opening file %s" % input_file)
+        print(str(exception))
+        sys.exit(1)
+
+    # Find the interesting elements of the XML tree
+    try:
+        for child in root:
+            if child.tag.endswith('oval_definitions'):
+                oval_definitions = child
+            if child.tag.endswith('results'):
+                results = child
+        for child in oval_definitions:
+            if child.tag.endswith('definitions'):
+                definitions = child
+        for child in results:
+            if child.tag.endswith('system'):
+                system = child
+                for child in system:
+                    if child.tag.endswith('definitions'):
+                        results_system_definitions = child
+        for child in system:
+            if child.tag.endswith('tests'):
+                tests = child
+            if child.tag.endswith('oval_system_characteristics'):
+                oval_system_characteristics = child
+        for child in oval_system_characteristics:
+            if child.tag.endswith('collected_objects'):
+                collected_objects = child
+            if child.tag.endswith('system_data'):
+                system_data = child
+    except Exception as exception:
+        print("Error parsing file %s" % input_file)
+        print(str(exception))
+        sys.exit(1)
+
+    # Filter out the security issues with priority above the threshold
+    relevant_issues = []
+    if debug_output:
+        print('List of definitions:')
+    for definition in definitions:
+        if debug_output:
+            print(' ' + definition.attrib['id'])
+        # Find out the test ids for the current definition
+        test_ids = []
+        for definition_child in definition:
+            if definition_child.tag.endswith('criteria'):
+                criteria = definition_child
+        # Inspect the other parts of the definition to see if the tests above need
+        # to be added to relevant_tests
+        for definition_child in definition:
+            if definition_child.tag.endswith('metadata'):
+                metadata = definition_child
+                for metadata_child in metadata:
+                    if metadata_child.tag.endswith('advisory'):
+                        advisory = metadata_child
+                        for advisory_child in advisory:
+                            if advisory_child.tag.endswith('severity'):
+                                severity = advisory_child
+                                severity_obj = Severity(severity.text, args.default_priority)
+                                if severity_obj >= prio_threshold:
+                                    relevant_issues.append(definition.attrib['id'])
+
+    # Print the lists of relevant security issues
+    if not quiet_output:
+        print('Security issues with priority >= %s:' % prio_threshold)
+        if relevant_issues:
+            for issue in relevant_issues:
+                print(' %s' % issue)
+        else:
+            print(' <None>')
+
+    # Find out relevant test objects
+    # Implementation notes:
+    # - the <criteria> elements may have nested elements like:
+    #   <definition definition_id="oval:com.ubuntu.bionic:def:54151000000" result="false" version="1">
+    #     <criteria operator="OR" result="false">
+    #       <criteria operator="AND" result="false">
+    #         <criterion test_ref="oval:com.ubuntu.bionic:tst:541510000000" version="1" result="false"/>
+    #         <criterion test_ref="oval:com.ubuntu.bionic:tst:541510000010" version="1" result="true"/>
+    #       </criteria>
+    #       <criteria operator="AND" result="false">
+    #         <criterion test_ref="oval:com.ubuntu.bionic:tst:541510000020" version="1" result="false"/>
+    #         <criterion test_ref="oval:com.ubuntu.bionic:tst:541510000030" version="1" result="true"/>
+    #       </criteria>
+    #       [...]
+    #     </criteria>
+    #   </definition>
+    # - the code below is suposed to work well with the style of nesting described above
+    # - each criteria may have an "AND" or "OR" operator however, for simplicity we are not taking into
+    #   account this operator and we are just ignoring any criteria/criterion with 'result="false"' and
+    #   its subtrees
+    relevant_tests_objects_ids = set()
+    if debug_output:
+        print("Definitions evaluations:")
+    def evaluate_criteria(criteria):
+        """Returns a list of test objects ids that make the given criteria result true"""
+        for criteria_child in criteria:
+            if criteria_child.tag.endswith('criteria'):
+                if criteria_child.attrib['result'] == 'true':
+                    evaluate_criteria(criteria_child)
+            if criteria_child.tag.endswith('criterion'):
+                if criteria_child.attrib['result'] == 'true':
+                    test_id= criteria_child.attrib['test_ref']
+                    object_id = test_id.replace(':tst:', ':obj:')
+                    if debug_output:
+                        print('  %s' % object_id)
+                    relevant_tests_objects_ids.add(object_id)
+    def evaluate_definition_criteria(definition):
+        """Returns a list of test objects ids that make the given definition result true"""
+        if debug_output:
+            print(' evaluate_definition_criteria of %s' % definition.attrib['definition_id'])
+        for definition_child in definition:
+            if definition_child.tag.endswith('criteria'):
+                evaluate_criteria(definition_child)
+    for definition in results_system_definitions:
+        if definition.attrib['result'] == 'true':
+            if definition.attrib['definition_id'] in relevant_issues:
+                evaluate_definition_criteria(definition)
+
+    # Find out the binary package names involved in security issues
+    # (these packages may be installed on the system or not)
+    bin_pkgs_involved = []
+    if debug_output:
+        print("Candidate packages to be updated by object id:")
+    for collected_object in collected_objects:
+        object_id = collected_object.attrib['id']
+        if object_id in relevant_tests_objects_ids:
+            if debug_output:
+                print(" candidate packages to be updated for %s:" % object_id)
+            for child in collected_object:
+                if child.tag.endswith('variable_value'):
+                    if debug_output:
+                        print('  ' + child.text)
+                    bin_pkgs_involved.append(child.text)
+
+    # See which packages we need to update to fix security issues
+    bin_pkgs_to_update = []
+    for system_data_child in system_data:
+        if system_data_child.tag.endswith('dpkginfo_item'):
+            dpkginfo_item = system_data_child
+            for dpkginfo_item_child in dpkginfo_item:
+                if dpkginfo_item_child.tag.endswith('name'):
+                    bin_pkg_name = dpkginfo_item_child.text
+                    if bin_pkg_name in bin_pkgs_involved:
+                        # skip this package if we disabled kernel package updates
+                        if no_kernel_updates and is_kernel_package(bin_pkg_name):
+                            continue
+                        # add the binary package name to the list
+                        bin_pkgs_to_update.append(bin_pkg_name)
+                    break
+
+    # Print the final list of packages to update
+    if not quiet_output:
+        print('Binary packages to update:')
+        if bin_pkgs_to_update:
+            for bin_pkg in bin_pkgs_to_update:
+                print(' %s' % bin_pkg)
+        else:
+            print(' <None>')
+
+    # Write the package list to the output file if needed
+    if output_file is not None:
+
+        # Open the output file
+        try:
+            output_file_handle = open(output_file, 'w')
+        except Exception as exception:
+            print("Error writing file %s" % output_file)
+            sys.exit(1)
+
+        # Write the list in the corresponding file
+        for bin_pkg_to_update in bin_pkgs_to_update:
+            print(bin_pkg_to_update, file=output_file_handle)
+
+        # Close the output file
+        output_file_handle.close()
+
+
+if __name__ == "__main__":
+    main()

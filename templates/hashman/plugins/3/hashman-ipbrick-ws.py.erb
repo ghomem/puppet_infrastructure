@@ -1,0 +1,489 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*
+"""Purpose:
+    Receive the desired state of a user in IPBRICK and enforce it using IPBRICK webservices.
+
+Examples:
+    To create a user that does not yet exist:
+        pp_auth_ipbrick_ws 'tester01' 'present' 'Tester 01' -p '&!Zbb_X$#V8'
+    To lock the previous user:
+        pp_auth_ipbrick_ws 'tester01' 'locked' 'Tester 01'
+    To unlock the previous user:
+        pp_auth_ipbrick_ws 'tester01' 'present' 'Tester 01'
+    To delete the previous user:
+        pp_auth_ipbrick_ws 'tester01' 'absent' 'Tester 01'
+
+Possible improvements:
+  Under-the-hood this uses functions which call the Webservices.
+  Possibly a class/object oriented approach would be faster
+  (you could progressibly add info to an object and minize webservice calls).
+"""
+
+# System imports
+import argparse
+import base64
+import getpass
+import json
+import logging
+import sys
+
+# Third-party imports
+import zeep
+import requests
+
+IPBRICK_IP    = '<%= @ipbrickip %>'
+IPBRICK_PORT  = '<%= @ipbrickport %>'
+AUTH_LOGIN    = '<%= @ipbrickwslogin %>'
+AUTH_PASSWORD = '<%= @ipbrickwspass %>'
+
+### Constants (includes constants built using constants)
+LOG_FILEPATH = "/var/log/pp_auth_ipbrick_ws.log"
+# API (i.e. WEBSERVICE)
+WS_MODULE = "SystemWS"
+IPBRICK_IP_PORT = "{}:{}".format(IPBRICK_IP, IPBRICK_PORT)
+NEW_API_LOCATION_URL = "https://{}/webservice/ws-server.php?module={}".format(IPBRICK_IP_PORT, WS_MODULE)
+NEW_API_WSDL_URL     = "https://{}/webservice/ws-server.php?module={}&wsdl".format(IPBRICK_IP_PORT, WS_MODULE)
+OLD_API_LOCATION_URL = "https://{}/webservice/ws-srv.php?module={}".format(IPBRICK_IP_PORT, WS_MODULE)
+OLD_API_WSDL_URL     = "https://{}/webservice/{}.wsdl".format(IPBRICK_IP_PORT, WS_MODULE)
+
+
+def create_new_api_service():
+    '''Helper function that creates the service object for the new api'''
+    logging.info("Going to create new API service...")
+    # Skip SSL/TLS certificate verification
+    session = requests.Session()
+    session.verify = False
+    transport = zeep.transports.Transport(session=session)
+    # Create client object and binding service
+    client = zeep.Client(NEW_API_WSDL_URL, transport=transport, strict=False)
+    service = client.create_service("{urn:SystemWS}SystemWSBinding", NEW_API_LOCATION_URL)
+    logging.info("OK")
+    return service
+
+def check_common_name(webservice, username, common_name):
+    '''Helper function that takes the webservice, username and common name, calls the webservice (new API) appropriate method, and checks if the common name matches in the response'''
+    logging.info("Going to call new API method to get users...")
+    response = webservice.getWSUsers(apiAccessLogin=AUTH_LOGIN,apiAccessPass=base64.b64encode(AUTH_PASSWORD))
+    logging.info("OK")
+    for user in response['User']:
+        if user['name'] == common_name:
+            logging.info("Checked common name matches.")
+            return True
+            break
+    else:
+        logging.info("Checked common name does not match.")
+        return False
+
+def check_username_exists(webservice, username):
+    '''Helper function that takes the webservice and username, calls the webservice (new API) appropriate method, and checks if the username exists in the response'''
+    # Maybe in the future the method getWSSystemUserInfoByLogin could be considered instead
+    # The method to get user information is available on both APIs, so we'll use the new API
+    logging.info("Going to call new API method to get users...")
+    response = webservice.getWSUsers(apiAccessLogin=AUTH_LOGIN,apiAccessPass=base64.b64encode(AUTH_PASSWORD))
+    logging.info("OK")
+    for user in response['User']:
+        if user['login'] == username:
+            return True
+            break
+    else:
+        return False
+
+def get_uidnumber(webservice, username):
+    '''Helper function that takes the webservice and username, calls the webservice (new API) appropriate method, and gets the uidnumber'''
+    logging.info("Going to call new API method to get uidnumber...")
+    response = webservice.getWSUsers(apiAccessLogin=AUTH_LOGIN,apiAccessPass=base64.b64encode(AUTH_PASSWORD))
+    logging.info("OK")
+    for user in response['User']:
+        if user['login'] == username:
+            uidnumber = user['uidnumber']
+            logging.info("Retrieved uidnumber '{}' for user '{}'".format(uidnumber, username))
+            return uidnumber
+            break
+    else:
+        error_message="Could not find uidnumber for user '{}'. Maybe the user does not exist?".format(username)
+        logging.critical(error_message)
+        raise Exception(error_message)
+
+def modify_user(webservice, username, common_name, password=None):
+    '''Helper function that takes the webservice, username, common_name and password, and calls the webservice (new API) appropriate method to update the common_name and/or password.'''
+    # first we need to get the uidnumber
+    uidnumber = get_uidnumber(webservice=webservice, username=username)
+    logging.info("Going to call new API method to update password...")
+    # then we call the modify and apply method (from the new API)
+    response = None
+    if password is not None:
+        response = webservice.modifyWSUserAndApplyChanges(
+            apiAccessLogin=AUTH_LOGIN,
+            apiAccessPass=base64.b64encode(AUTH_PASSWORD),
+            User={
+                'uidnumber': uidnumber,
+                'password':  password,
+                'name':      common_name,
+            }
+        )
+    else:
+        response = webservice.modifyWSUserAndApplyChanges(
+            apiAccessLogin=AUTH_LOGIN,
+            apiAccessPass=base64.b64encode(AUTH_PASSWORD),
+            User={
+                'uidnumber': uidnumber,
+                'name':      common_name,
+            }
+        )
+    logging.info("OK, got {}".format(response))
+    if response['resultcode'] == 1:
+        logging.info("OK, IPBrick replied user was modified successfully.")
+        return 0
+    else:
+        error_message = "IPBrick returned error when trying to modifiy user!"
+        logging.critical(error_message)
+        raise Exception(error_message)
+
+def user_lock_unlock(webservice, username, action):
+    """A helper function that deals with both locking and unlocking"""
+    # Check we have a supported action as input
+    assert action == 'lock' or action == 'unlock', "Action must be lock or unlock when using this helper function. Hint: check for programming errors."
+    # Get the user number
+    uidnumber = get_uidnumber(webservice=webservice, username=username)
+    # Log what we will try to do
+    logging.info("Going to call new API method to lock-unlock user with action '{}'...".format(action))
+    # Call the webservice
+    response = webservice.lockWSUserAndApplyChanges(
+        apiAccessLogin=AUTH_LOGIN,
+        apiAccessPass=base64.b64encode(AUTH_PASSWORD),
+        User=uidnumber,
+        Action=action,
+    )
+    # Log the response received from the API call
+    logging.info("API response was {}".format(response))
+    # Check return code
+    if response['resultcode'] == 1:
+        logging.info("OK, IPBrick replied that action '{}' was successfully.".format(action))
+        return 0
+    else:
+        error_message = "IPBrick returned error when trying action '{}'!".format(action)
+        logging.critical(error_message)
+        raise Exception(error_message)
+
+def user_lock(webservice, username):
+    """Wrapper function to call user_lock_unlock with lock action"""
+    user_lock_unlock(webservice, username, 'lock')
+
+def user_unlock(webservice, username):
+    """Wrapper function to call user_lock_unlock with unlock action"""
+    user_lock_unlock(webservice, username, 'unlock')
+
+def create_old_api_service():
+    '''Helper function that creates the service object for the old api'''
+    logging.info("Going to create old API service...")
+    # Skip SSL/TLS certificate verification
+    session = requests.Session()
+    session.verify = False
+    transport = zeep.transports.Transport(session=session)
+    # Create client object and binding service
+    client = zeep.Client(OLD_API_WSDL_URL, transport=transport, strict=False)
+    service = client.create_service("{http://www.ipbrick.com}IPBrickWSBinding", OLD_API_LOCATION_URL)
+    logging.info("OK")
+    return service
+
+def add_user(webservice, username, common_name, password, message=None):
+    '''Helper function that takes the webservice, username and password, and calls the webservice (old API) appropriate method to set the password'''
+    logging.info("Going to call old API method to add user...")
+    json_request = json.dumps(
+        {
+            "auth":
+                {
+                    "login": AUTH_LOGIN,
+                    "password": base64.b64encode(AUTH_PASSWORD),
+                },
+            "args":
+                {
+                    "login" :   username,
+                    "password": password,
+                    "name":     common_name
+                }
+        }
+    )
+    # WARNING: while not mentioned in IPBrick's information (Manual, WSDL or PHP code),
+    # the name parameter is mandatory for the success of the method apply_conf_sync to be
+    # applied later (this method apply_conf_sync is not in the Manual, see the WSDL and PHP code)
+    response = webservice.addWSUser(arguments=json_request)
+    logging.info("OK, the response was: {}".format(response))
+    response_decoded = json.loads(response)
+    logging.info("Decoded json")
+    coderesult = response_decoded["coderesult"]
+    # Notice that the manual states
+    # coderesult(”-1”);
+    # Yet, one unsuccessful response was (notice in this case it's NOT a string):
+    # {"coderesult":-1,"result":[1006]}
+    # So we use both a number and a string comparison
+    if coderesult == -1 or coderesult == "-1":
+        error_message = "IPBrick returned error when trying to create user! Error codes received: '{}'".format(response_decoded["result"])
+        logging.critical(error_message)
+        raise Exception(error_message)
+    else:
+        logging.info("OK, IPBrick replied user was created successfully, with uidnumber '{}'.".format(coderesult))
+        logging.info("Going to call apply_conf_sync to make changes have effect...")
+        comment="Added user with uidnumber '{}', username '{}' and common name '{}'.".format(coderesult, username, common_name)
+        apply_conf_sync(webservice=webservice, comment=comment, message=message)
+        return 0
+
+def apply_conf_sync(webservice, comment, message=None):
+    '''Helper function that takes the webservice and a comment and calls the webservices (old API) appropriate method to apply configuration changes.'''
+    logging.info("Going to call old API method to apply configuration, this usually takes >1min (current timeout is zeep default of 5min)")
+    text = "pp_auth_ipbrick_ws.py: {}".format(comment)
+    if message is not None:
+      text+=" Message: {}".format(message)
+    arguments = [AUTH_LOGIN, base64.b64encode(AUTH_PASSWORD), text]
+    # zeep default timeout is 300 seconds (5min) so hopefully that will be enough
+    response = webservice.apply_conf_sync(arguments=arguments)
+    logging.info("Got response: {}".format(response))
+    # by trial and error, a successful response is:
+    # ['1', 'Successfully updated!']
+    if response[0] == '1' and response[1] == 'Successfully updated!':
+        logging.info("OK, IPBrick apply_conf_sync returned success, applying configuration was successfull")
+        return 0
+    else:
+        error_message="KO, IPBrick apply_conf_sync did not returned success! Response was:\n{}\nHint: see also IPBrick logs.".format(response)
+        logging.critical(error_message)
+        raise Exception(error_message)
+
+def check_password_validates(webservice, username, password):
+    '''Helper function that takes the webservice, username and password, calls the webservice (old API) appropriate method, and checks if the password validates'''
+    logging.info("Going to call old API method to validate password...")
+    # with the old API we need to encode the request
+    json_request = json.dumps(
+        {
+            "auth":
+                {
+                    "login": AUTH_LOGIN,
+                    "password": base64.b64encode(AUTH_PASSWORD),
+                },
+            "args":
+                {
+                    "login" : username,
+                    "password"  : password
+                }
+        }
+    )
+    response = webservice.validateWSLoginCredentials(arguments=json_request)
+    logging.info("OK, the response was: {}".format(response))
+
+    # from trial and error, and from IPBrick email, a validating login gets:
+    # {"coderesult":"1","result":1}
+    # but BOTH a non-validating login or badly formed request (e.g. no login and no password) get:
+    # {"coderesult":"1","result":-1}
+    # also NOTICE the use of a string instead of an integer for the coderesult value
+    # but not for the result value
+
+    # With the old API we need to decode the json string received
+    response_decoded = json.loads(response)
+    logging.info("Decoded json")
+    if response_decoded["coderesult"] == "1" and response_decoded["result"] == 1:
+        logging.info("Checked that for user '{}' the password validates, returning True.".format(username))
+        return True
+    elif response_decoded["coderesult"] == "1" and response_decoded["result"] == -1:
+        logging.info("Checked that for user '{}' the password does not validate, returning False.".format(username))
+        return False
+    else: # we treat other coderesults as errors (as per IPBRick email, 2 is password expired and 3 is account locked)
+        error_message = "KO! Got error from IPBrick or an unexpected response (expecting coderesult to match 'validate' or 'does not validate'). Hint: check the response in the logs."
+        logging.critical(error_message)
+        raise Exception(error_message)
+
+def delete_user(old_webservice, new_webservice, username, message=None):
+    '''Helper function that takes the webservices and username as inputs and calls the webservice (old API) appropriate methods to delete the user and to apply configuration.'''
+    # first we need to get the uidnumber
+    uidnumber = get_uidnumber(webservice=new_webservice, username=username)
+    # notice in the old API "uidnumber" is known as "usernumber"
+    json_request = json.dumps(
+        {
+            "auth":
+                {
+                    "login": AUTH_LOGIN,
+                    "password": base64.b64encode(AUTH_PASSWORD),
+                },
+            "args":
+                {
+                    "usernumber": uidnumber,
+                }
+        }
+    )
+    logging.info("Going to call old API method to delete user...")
+    response = old_webservice.delWSUser(arguments=json_request)
+    logging.info("OK, the response was: {}".format(response))
+    response_decoded = json.loads(response)
+    logging.info("Decoded json")
+    coderesult = response_decoded["coderesult"]
+    if coderesult == 1:
+        logging.info("OK, IPBrick replied user was deleted successfully.")
+        logging.info("Going to call apply_conf_sync to make changes have effect...")
+        comment="Deleted user with uidnumber '{}' and username '{}'.".format(uidnumber, username)
+        apply_conf_sync(webservice=old_webservice, comment=comment, message=message)
+        return 0
+    else:
+        error_message = "IPBrick returned error when trying to delete user! See the response in the log file."
+        logging.critical(error_message)
+        raise Exception(error_message)
+
+def main(argv=None):
+
+
+    # Parse input arguments
+    parser = argparse.ArgumentParser(
+        description='Syncronize user config with IPBRICK via webservices.',
+        epilog="EXAMPLES See script docstring."
+    )
+    parser.add_argument(
+        'username',
+        type=str,
+        help='The username for which the desired state is to be ensured in IPBRICK',
+    )
+    parser.add_argument(
+        'ensure',
+        help="The desired state of the user in IPBRICK. If set to 'present' or 'locked' for a non-existing user, the password is mandatory and the user will be created with the given password. If set to 'present' or 'locked' for an existing user, the password is optional (if given, it will be enforced). In both cases, the common_name will be set to the given common_name. A 'present' state means the user is unlocked. If set to 'absent', the user will be deleted if it exists (the common name is ignored, and also the password if given).",
+        choices=['present', 'locked', 'absent']
+    )
+    parser.add_argument(
+        'common_name',
+        type=str,
+        help='The common name that is to be set for the username',
+    )
+    parser.add_argument(
+        '-p','--password',
+        nargs=1,
+        type=str,
+        help="The user password. This option becomes mandatory if the user does not exist in IPBRICK and ensure is set to 'present' or 'locked'."
+    )
+    parser.add_argument(
+        '-m','--message',
+        nargs=1,
+        type=str,
+        help="A message to explain the reason for the action. This will be found in the logs. When an IPBRICK configuration apply is made (i.e. when adding or deleting users), it will also be found in IPBRICK."
+    )
+
+    # See Guido's suggestion here for mixing from CLI calls with from import calls
+    # More than interactive use, we're interest in calling this main() function
+    # from our script with tests, which imports this module (thus skiping the command line call)
+    # http://www.artima.com/weblogs/viewpost.jsp?thread=4829
+    if argv is None:
+        # from trial and error, parse_args expects not to find the script name
+        # so if we are taking the input from the command line we drop that
+        argv = sys.argv[1:]
+    args = parser.parse_args(argv)
+
+    # Start logging after argument parsing
+    # Warning: setting level to DEBUG will leak passwords to log file (both IPBrick auth and passords being set)
+    logging.basicConfig(filename=LOG_FILEPATH, level=logging.INFO)
+    logging.info("START pp_auth_ipbric_ws call")
+
+    # If the user is to be deleted
+    if args.ensure == 'absent':
+        # warn that the common name will be ignored
+        logging.warning("Called with ensure='{}'. The common name will be ignored (i.e. the user will be deleted if it exists, whatever its common name).".format(args.ensure))
+        # and if a password was given
+        if args.password is not None:
+            # warn that it will be ignored
+            logging.warning("Called with ensure='{}' but a password was given. It will be ignored".format(args.ensure))
+
+    # Further parse the message to a string and log it
+    parsed_message = None
+    if args.message is None:
+        logging.info("Did not receive an input message.")
+    else:
+        logging.info("Received this input message: '{}'.".format(args.message[0]))
+        parsed_message = args.message[0]
+
+    # get the object to call methods of the new API
+    new_api_service = create_new_api_service()
+
+    # Find out if the user is present or absent
+    user_exists = check_username_exists(webservice=new_api_service, username=args.username)
+    # We branch the treatment of the desired states as per if the user exists or not
+    # because the way to implement is very different
+    if user_exists:
+        logging.info("Checked user '{}' exists.".format(args.username))
+        # if the user must exist
+        if args.ensure == 'present':
+            if user_exists:
+                # we don't have a method that allows to check if the user is lock or unlocked, so we unlock in all cases
+                user_unlock(new_api_service, args.username)
+                # if a password was given
+                if args.password is not None:
+                    # lets see it it validates, for which we need the old webservice
+                    old_api_service = create_old_api_service()
+                    password_validates = check_password_validates(webservice=old_api_service, username=args.username, password=args.password[0])
+                    # if it does not validate
+                    if password_validates == False:
+                        # lets update the user (we bypass the need to check the common_name
+                        modify_user(webservice = new_api_service, username=args.username, common_name=args.common_name, password=args.password[0])
+                    else: # i.e. password does not validate
+                        # lets check if the common name is OK
+                        common_name_matches = check_common_name(new_api_service, username=args.username, common_name=args.common_name)
+                        # if it is not OK
+                        if common_name_matches == False:
+                            # then we change it
+                            modify_user(webservice = new_api_service, username=args.username, common_name=args.common_name)
+                else: # i.e. a password was not given
+                    common_name_matches = check_common_name(new_api_service, username=args.username, common_name=args.common_name)
+                    # if it is not OK
+                    if common_name_matches == False:
+                    # then we change it
+                        modify_user(webservice = new_api_service, username=args.username, common_name=args.common_name)
+        elif args.ensure == 'locked':
+            # we don't have a method that allows to check if the user is lock or unlocked, so we lock in all cases
+            user_lock(new_api_service, args.username)
+            # if we have to set a password
+            if args.password is not None:
+                # we cannot tell wether or not it validates because we have no way to tell if it's due a user being locked
+                # (and we do not want to unlock a user just to check if the password validates)
+                # so we just update the user in all cases
+                    modify_user(webservice = new_api_service, username=args.username, common_name=args.common_name, password=args.password[0])
+            else: # i.e. a password was nog given
+                # lets check if the common name is OK
+                common_name_matches = check_common_name(new_api_service, username=args.username, common_name=args.common_name)
+                # if it is not OK
+                if common_name_matches == False:
+                    # then we change it
+                    modify_user(webservice = new_api_service, username=args.username, common_name=args.common_name)
+        else: # i.e. args.ensure == 'absent'
+            # in this case we also need the old API (to delete the user)
+            old_api_service = create_old_api_service()
+            logging.info("Going to delete user.")
+            delete_user(
+                old_webservice=old_api_service,
+                new_webservice=new_api_service,
+                username=args.username,
+                message=parsed_message,
+            )
+    else: # i.e. user does not exist
+        logging.info("Checked user '{}' does not exist".format(args.username))
+        if args.ensure == 'present' or args.ensure == 'locked':
+            # in this case we will also need the old API (to create the user)
+            old_api_service = create_old_api_service()
+            # We need a password, therefore give error if we don't have it
+            try:
+                assert args.password is not None
+            except Exception as e:
+                error_message="Called with ensure='{}' and the user does not exist, therefore we need a password but none was given.".format(args.ensure)
+                logging.critical(error_message)
+                raise Exception(error_message)
+            logging.info("Going to create user setting password to input password")
+            # create the user
+            add_user(
+                webservice=old_api_service,
+                username=args.username,
+                common_name=args.common_name,
+                password=args.password[0],
+                message=parsed_message,
+            )
+            # Lock it if desired
+            if args.ensure == 'locked':
+               user_lock(new_webservice, args.username)
+               pass
+        else: # i.e. the user does not exist and must be 'absent'
+            # we don't need action
+            logging.info("Nothing to do.")
+    logging.info("END pp_auth_ipbric_ws call")
+
+if __name__ == "__main__":
+    main()

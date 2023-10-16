@@ -1,0 +1,14 @@
+# Ensure this file has a name so that it is listed
+# before the file with the config to send to the centralized log server
+$ModLoad imfile
+$InputFilePollInterval 10
+
+<%# Log files to monitor come from the hash-of-hashes "logs_to_stream": -%>
+<% @logs_to_stream.each do |key_appname, subhash| -%>
+# <%=key_appname%>
+<%# The filepath of log to track (this has the key "log_filepath" in the subhash) -%>
+$InputFileName <%=subhash['log_filepath']%>
+<%# The log appname (aka tag) is the key to the subhash (notice the trailing :) -%>
+$InputFileTag <%=key_appname%>:
+$InputRunFileMonitor
+<% end -%>

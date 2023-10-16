@@ -1,0 +1,19 @@
+#!/usr/bin/python3
+
+import time
+
+from flask import Flask
+app = Flask(__name__)
+
+@app.route("/")
+def hello():
+    welcome_msg = '<%= @welcome_msg %>'
+    timestamp = time.strftime('%a, %d %b %Y %X %z')
+    html = """
+      <h1 style='color:blue'>%s</h1>
+      <p>Dynamic HTML generated on: <b>%s</b></p>
+      """ % (welcome_msg, timestamp)
+    return html
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0')

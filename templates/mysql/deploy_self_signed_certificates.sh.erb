@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Define the certificate info
+CERT_INFO="/C=PT/ST=Lisbon/L=Lisbon/O=<%= @organization %>/OU=IT/CN=<%= @cname %>/emailAddress=<%= @email %>"
+
+# CA
+openssl genrsa 2048 > ca-key.pem
+openssl req -new -x509 -nodes -days 365000 -key ca-key.pem -subj "$CERT_INFO" -out ca.pem
+
+# Priv Key + Certificate
+openssl req -newkey rsa:2048 -days 365000 -nodes -keyout server-key.pem -subj "$CERT_INFO" -out server-req.pem
+openssl rsa -in server-key.pem -out server-key.pem
+
+# Self sign the certificate
+openssl x509 -req -in server-req.pem -days 365000 -CA ca.pem -CAkey ca-key.pem -set_serial 01 -out server-cert.pem
+
+# Move the files, change their ownership and permissions
+rm ca-key.pem server-req.pem
+mv ca.pem server-key.pem server-cert.pem <%= @ssl_dir %>
+chown root:root <%= @ssl_dir %>*
+chmod 644 <%= @ssl_dir %>*

@@ -1,0 +1,37 @@
+# via rsyslog
+
+  input {
+    tcp {
+      port                  => 1514
+      type                  => syslog
+      ssl_cert              => "/etc/ssl/logstash-server-cert.pem"
+      ssl_key               => "/etc/ssl/logstash-server-key.pem"
+      ssl_extra_chain_certs => "/etc/ssl/logstash-ca.pem"
+      ssl_enable            => true
+      ssl_verify            => <%=@logstash_ssl_verify%>
+    }
+  }
+
+  filter {
+    if [type] == "syslog" {
+      grok {
+        match     => { "message" => "%{SYSLOGTIMESTAMP:syslog_timestamp} %{SYSLOGHOST:syslog_hostname} %{DATA:syslog_program}(?:\[%{POSINT:syslog_pid}\])?: %{GREEDYDATA:syslog_message}" }
+        add_field => [ "received_at", "%{@timestamp}" ]
+        add_field => [ "received_from", "%{host}" ]
+      }
+      date {
+        match     => [ "syslog_timestamp", "MMM  d HH:mm:ss", "MMM dd HH:mm:ss" ]
+      }
+    }
+  }
+
+  output {
+    elasticsearch {
+<% if @use_logstash_failover == true %>
+      hosts => ["<%=@elk_server_ip%>:9200", "<%=@elk_server_failover_ip%>:9200"]
+<% else %>
+      hosts => ["localhost:9200"]
+<% end %>
+      index => "syslogstash-%{+YYYY.MM.dd}"
+    }
+  }

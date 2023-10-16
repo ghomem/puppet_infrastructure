@@ -1,0 +1,4 @@
+# Log a warning if the From field do not match one of the expected regexes
+if /^From: /
+!/^From: ((<%=@do_not_warn_from_addresses_regexes.join(')|(')%>))/ WARN "An email was sent with this FROM header that is not expected! (it does not match the input regular expressions)"
+endif

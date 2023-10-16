@@ -1,0 +1,34 @@
+#!/bin/sh
+
+set -e # we set this so the script ends after any failed command
+       # please note that even if we have any failed command, the clean up
+       # function is going to be called anyway
+
+# function to clean up temporary files/dirs
+cleanup() {
+  # Clean up the temporary directory
+  rm -rf $TEMPDIR
+}
+
+# clean up when this script ends
+trap cleanup EXIT KILL
+
+MON=$(date +"%m")
+YR=$(date +"%Y")
+
+DBIP_FILE="<%= @dbip_file %>"
+DBIP_KEY="<%= @dbip_key %>"
+
+rm -f $DBIP_FILE
+TEMPDIR=`mktemp -d`
+if [ -z "$DBIP_KEY" ]; then
+	DOWNLOAD_URL="https://download.db-ip.com/free/dbip-country-lite-${YR}-${MON}.csv.gz"
+else
+	JSON_URL="https://db-ip.com/account/${DBIP_KEY}/db/ip-to-country/"
+	wget ${JSON_URL} -O "$TEMPDIR/json"
+	DOWNLOAD_URL=`cat "${TEMPDIR}/json" | jq -r ".csv.url"`
+fi
+wget ${DOWNLOAD_URL} -O "${DBIP_FILE}.gz"
+gunzip "${DBIP_FILE}.gz"
+touch ${DBIP_FILE} # update timestamp for sysmon checks
+<%= @xt_geoip_build_path %> -D /usr/share/xt_geoip/ -S /usr/share/xt_geoip/

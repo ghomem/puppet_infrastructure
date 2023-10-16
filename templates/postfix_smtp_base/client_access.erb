@@ -1,0 +1,4 @@
+# Contains allowed IPs for SMTP clients trying to send email
+<% scope['puppet_infrastructure::postfix_smtp_base::allowed_client_ips'].each do |allowed_client_ip| -%>
+<%=allowed_client_ip%> OK
+<% end -%>

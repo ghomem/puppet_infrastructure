@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# list of nodes that need an immediate puppet run
+NODES='<%= @mconodes %>'
+MCO=/opt/puppetlabs/bin/mco
+PUPPET=/opt/puppetlabs/bin/puppet
+
+for n in $NODES; do
+    $MCO shell run "$PUPPET agent --test"  -I "$n" &
+done

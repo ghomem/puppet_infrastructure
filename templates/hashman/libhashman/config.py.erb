@@ -1,0 +1,151 @@
+import os
+
+# variables that change on a case by case basis
+DBDIR  = '<%= @dbdir %>'
+MAIN_COMPANY = '<%= @company %>'
+MAIL_FROM = '<%= @mailfrom %>'
+SUPPORT_TEAM = <%= @team %>
+HASHMAN_URL = '<%= @url %>'
+# PROD vs TEST - controls notifications
+TESTENV = <%= @testenv %>
+DEBUG_MODE = <%= @debug_mode_activated %>
+
+# basic error codes for functions called from main()
+E_OK = 0
+E_ERR = 1
+
+# commands with write impact
+WRITERCMDS = [ 'setpw' , 'setpwint', 'lock' , 'unlock' , 'useradd' , 'userdel' , 'expire', 'unexpire', 'reset', 'test', 'setecryptfs', 'setpubkey' , 'unsetpubkey', 'unsetecryptfs', 'setemail', 'setcompany', 'import', 'inform' ]
+NOTIFCMDS  = [ 'setpw' , 'lock' , 'unlock' , 'useradd' , 'userdel' , 'expire', 'unexpire', 'reset', 'auth', 'extauth', 'inform' ]
+SHORTCMDS  = [ 'test' , 'listusers' , 'listplugins', ]
+# commands with type 3 plugin sync impact
+SYNCCMDS   = [ 'setpw' , 'setpwint', 'reset', 'userdel', 'lock' , 'unlock' , 'useradd', 'inform' ]
+
+# other definitions
+LOCKDIR = '/tmp/pp_auth.lock'
+# normpath is needed for trailing slashes due to irregular basename behaviour
+DBDIRBACK = LOCKDIR + '/' + os.path.basename(os.path.normpath(DBDIR))
+
+DBFILE_USER      = DBDIR + '/' + 'hashes.pp'
+DBFILE_CNAME     = DBDIR + '/' + 'cnames.pp'
+DBFILE_EMAIL     = DBDIR + '/' + 'emails.pp'
+DBFILE_COMPANY   = DBDIR + '/' + 'companies.pp'
+DBFILE_KEY       = DBDIR + '/' + 'keys.pp'
+DBFILE_PPSIGS    = DBDIR + '/' + 'ppsigs.pp'
+DBFILE_PPWRAPPED = DBDIR + '/' + 'ppwrapped.pp'
+DBFILE_SMB       = DBDIR + '/' + 'hashes_smb.pp'
+
+SUFFIX_USER      = '_pwd_hash'
+SUFFIX_CNAME     = '_cname'
+SUFFIX_EMAIL     = '_email'
+SUFFIX_KEY       = '_ssh_key'
+SUFFIX_COMPANY   = '_company'
+SUFFIX_PPSIGS    = '_ppsigs'
+SUFFIX_PPWRAPPED = '_ppwrapped'
+SUFFIX_SMB       = '_pwd_hash_smb'
+
+DBINFO = {
+    DBFILE_USER      : SUFFIX_USER,
+    DBFILE_CNAME     : SUFFIX_CNAME,
+    DBFILE_EMAIL     : SUFFIX_EMAIL,
+    DBFILE_COMPANY   : SUFFIX_COMPANY,
+    DBFILE_KEY       : SUFFIX_KEY,
+    DBFILE_PPSIGS    : SUFFIX_PPSIGS,
+    DBFILE_PPWRAPPED : SUFFIX_PPWRAPPED,
+    DBFILE_SMB       : SUFFIX_SMB }
+
+SEPARATOR = '='
+LOCKPREFIX = '!'
+EXPIREPREFIX = '!'
+AUTHDELAY_BASE = 2
+AUTHDELAY_DELTA = 3
+OURPROCTITLE = 'pp_auth.py'
+EMAIL_SUBJECT = 'Your account at ' + MAIN_COMPANY
+MYDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TEMPLATE_DIR = os.path.join(MYDIR, '../httpserver/templates')
+EMAIL_TEMPLATE = TEMPLATE_DIR + '/email/' + 'index.html'
+PLUGIN_DIR = os.path.normpath(os.path.join(MYDIR, '../plugins'))
+SENDMAIL_URL = "mailto:"
+HASHMAN_BUTTONTEXT = "CHANGE PASSWORD"
+SENDMAIL_BUTTONTEXT = "CONFIRM"
+CONFIRM_MAIL_CONTENT = "?subject=Account%20at%20" + MAIN_COMPANY + "&body=This%20is%20a%20confirmation%20that%20I%20received%20the%20email%20and%20now%20await%20instructions%20for%20the%20next%20steps. "
+
+# ecryptfs helpers
+UNWRAPCMD = '/usr/bin/ecryptfs-unwrap-passphrase'
+WRAPCMD   = '/usr/bin/ecryptfs-wrap-passphrase'
+SIGNCMD   = '/usr/bin/ecryptfs-add-passphrase'
+
+# html related definitions
+BREAK = '<br/>\n'
+DBREAK = BREAK + BREAK
+OUTERWIDTH = 492
+INNERWIDTH = 452
+INNERWIDTH2 = 400
+PADDING = 3
+# 5px fixes "Need help" text on Microsoft Outlook, and breaks it elsewhere, 0 fixes it elsewhere and breaks MSO
+PADDING_MSO = 0
+MAIN_COLOR = '2199e8'
+LIGHT_COLOR = 'ffffff'
+BG_COLOR = 'f3f3f3'
+RED_COLOR = 'E76861'
+GRAY_COLOR = '949494'
+# this is the default on the template, we use this variable for customization when keeping the color (hex 515151, rgb 81 81 81)
+TEXT_COLOR = '515151'
+FILEHEIGHT = 25
+FILEWIDTH = 300
+EXTRA_WIDTH = 90
+NERRORS = 2
+HEADLINE_SIZE = 14
+# email body text
+BODY_TEXT_USERADD = 'Your account has been set up.' + DBREAK + 'For security reasons, you must now contact our team and confirm the reception of this email. Once you contact us we will unlock your account so you can change your temporary password to a final one.' + DBREAK + 'To do so, please click on the button below'
+BODY_TEXT_RESET = 'Your account has been reset with existing username ' + '{{ DUMMYUSERNAME }}' + ' and ' + '{{ DUMMYPASSWORD }}' + ' as a new temporary password.' + DBREAK + 'You can now change your temporary password to a final one at the link below.'
+BODY_TEXT_TEST = 'Test message for account with username ' + '{{ DUMMYUSERNAME }}' + '.  If you know your password can change it to a different one at the link below.'
+BODY_TEXT_INFORM = 'Your confirmation email has been received and your account was unlocked.' + DBREAK + 'Your account has username ' + '{{ DUMMYUSERNAME }}' + ' and ' + '{{ DUMMYPASSWORD }}' + ' as a temporary password.' + DBREAK + 'You can now change your temporary password to a final one at the link below.'
+
+# minimun and maximum stuff for users, passwords, ecryptfs stuff, pubkeys
+# this is really just to avoid being bombed with huge strings for whatever reason
+MAXSTR = 2000
+MINSTR = 2
+MINPASSWORDLEN = <%= @minpasswordlen %>
+# password size for useradd random password, must be >= MINPASSWORDLEN so we use MINPASSWORDLEN
+PASSWORDLEN = MINPASSWORDLEN
+# whether or not we want to relax the password structure rules
+RELAXPASSWORD = <%= @relaxpassword %>
+# limit usernames to a reasonable size
+MAXUSR = 20
+
+# we support worst case plus one second
+LOCKTIMEOUT = AUTHDELAY_BASE + AUTHDELAY_DELTA + 1
+
+# workout whitelists for usernames, passwords, cnames and emails
+LOWERCASE = "abcdefghijklmnopqrstuvwxyz"
+UPPERCASE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+# attempt at covering most accented characters without keeping the list under control
+# nice Wikipedia reference - https://en.wikipedia.org/wiki/Diacritic
+ACCENTED_PT = 'áâãàéêíóôõúçÁÂÃÀÉÊÍÓÔÕÚÇ'
+EXTRA_ACCENTED_ES = 'ñÑ'
+EXTRA_ACCENTED_SE = 'åäöÅÄÖ'
+EXTRA_ACCENTED_DK = 'øæœØÆŒ'
+EXTRA_ACCENTED_DE = 'üÜ'
+ACCENTED = ACCENTED_PT + EXTRA_ACCENTED_ES + EXTRA_ACCENTED_SE + EXTRA_ACCENTED_DK + EXTRA_ACCENTED_DE
+
+NUMBERS = "0123456789"
+SYMBOLS = "!?#$%&*@+-._=;:|/"
+LETTERS = LOWERCASE + UPPERCASE
+WHITELIST = NUMBERS + LETTERS + '.'
+# restricted special chars to the most common ones - also on next.html and customvalidation.js
+WHITELIST_PWD = SYMBOLS + NUMBERS + LETTERS
+# usernames are ruby variable names, no other chars allowed or pupet will break
+WHITELIST_USR = NUMBERS + LETTERS
+# for temporary passwords to make them simpler for the user
+# l and i are too similar on some fonts
+WHITELIST_TMP = (LETTERS + NUMBERS).replace('l', '').replace('i', '')
+# the = sign is the delimiter but we have it included in the files
+WHITELIST_B64 = NUMBERS + LETTERS + '/+' + '='
+WHITELIST_COMPANY = WHITELIST + ACCENTED + ' '
+
+# from man crypt
+SALTLIST = LETTERS + './'
+SALTTYPE = '6'
+SALTSIZE = 16

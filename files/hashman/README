@@ -1,0 +1,18 @@
+Hashman - Puppet hash manager
+
+Requirements:
+
+apt-get install python-flask python-cracklib python-setproctitle
+
+Customization:
+Default logo and favicon are installed at httpserver/static/img/. If they are overwritten by the sysadmin Puppet let's go of them.
+
+Plugins are in the template directory.
+
+Hashman accepts plugins of the following types:
+
+* type 1 - standalone plugin which receives no CLI arguments (ex: local puppet run)
+* type 2 - plugin that receives only an informative message as a CLI argument (ex: local git backup)
+* type 3 - plugin that receives user information and an informative message via CLI (ex: IPBrick users sync)
+
+These plugins reside at plugins/{1,2,3} respectively.

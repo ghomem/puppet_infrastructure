@@ -1,0 +1,9 @@
+[Unit]
+Description=Automatically apply LD patches
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=<%= @localbindir %>/ld-apply-patches
+KillMode=process
+TimeoutStopSec=900

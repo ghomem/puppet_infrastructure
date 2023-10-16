@@ -1,0 +1,4 @@
+# Contains allowed MAIL FROM addresses for SMTP clients trying to send email
+<% scope['puppet_infrastructure::postfix_smtp_base::allowed_mail_from_addresses'].each do |allowed_mail_from_address| -%>
+<%=allowed_mail_from_address%> OK
+<% end -%>

@@ -1,0 +1,26 @@
+#!/bin/sh 
+
+set -x
+
+wait_if_puppet_agent_running() {
+  RET=0
+  while [ $RET -eq 0 ]; do
+    sleep 10
+    # grep returns 1 if nothing found
+    ps -ef | grep -v grep | grep "puppet agent" 
+    RET=$?
+  done
+}
+
+# Update the geoip database
+<%= @localdir %>/bin/load_geoip_dbip.sh
+
+# Wait for the agent to finish if it's already running
+wait_if_puppet_agent_running
+
+# Flush iptables and run the agent again to re-create the iptables rules,
+# this should make effective the update of the geoip database
+sudo puppet agent --disable; \
+<%= @localdir %>/bin/iptables-flush.sh; \
+sudo puppet agent --enable; \
+sudo puppet agent -t

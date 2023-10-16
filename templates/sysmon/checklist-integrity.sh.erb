@@ -1,0 +1,18 @@
+#!/bin/bash
+
+OUTDIR="<%= @outdir %>"
+OUTFILE="<%= @outfile %>"
+FILELIST="<%= @filelist %>"
+
+CHECKLIST=""
+
+for f in $FILELIST; do
+    result=`md5sum $f`
+    if [ -z "$CHECKLIST" ]; then
+        CHECKLIST="$result"
+    else
+        CHECKLIST="$CHECKLIST:$result"
+    fi
+done
+
+echo "\$integrity_checklist='$CHECKLIST'" > $OUTDIR/$OUTFILE

@@ -1,0 +1,4 @@
+#  See man 5 aliases for format
+<% unless @root_email_alias.nil? -%>
+root: <%=@root_email_alias%>
+<% end -%>

@@ -1,0 +1,1228 @@
+# Linux policies from LD8 installer 8.1.9
+PROJECTNAME=linuxint
+CIFSVERSION_DEFAULT="1.0"
+
+# Mozilla installation hashes. These are needed below to create automatically
+# firefox and thunderbird profiles and set them as default, for more information see:
+# - https://bitbucket.org/asolidodev/is-desktop8/wiki/Mozilla%20profiles
+# - https://bitbucket.org/asolidodev/is-desktop8/issues/98/support-automatic-creation-of-mozilla
+FIREFOX_INSTALL_HASH="4F96D1932A9F858E"
+THUNDERBIRD_INSTALL_HASH="FDC34C9F024745EB"
+
+############################ HELPER FUNCTIONS ################################
+
+# functions and definitions used by several scripts
+
+function debug {
+
+TAG=$PROJECTNAME-scripts
+logger -p local1.notice -t $TAG "$0 $@"
+
+}
+
+function replaceExpr
+{
+
+        FILE=$1
+        OLDEXP=$2
+        NEWEXP=$3
+
+        echo replacing $OLDEXP by $NEWEXP on $1
+        # we use a different delimiter to avoid problems with path replacement and LDAP path woes...
+        sed -i -e "s;$OLDEXP;$NEWEXP;g" $FILE
+}
+
+function str_subtract()
+{
+  SET1=( $1 )
+  SET2=( $2 )
+  OLDIFS="$IFS"
+  IFS=$'\n'
+  SET3=( $(grep -Fxv "${SET1[*]}" <<< "${SET2[*]}") )
+  IFS="$OLDIFS"
+  echo "${SET3[*]}"
+  # SET3 = SET2-SET1
+}
+
+function runScript
+{
+
+# filenames may have spaces, protect them
+MYFILE="$1"
+
+debug "searching for $MYFILE"
+if [ -f "$MYFILE" ]; then
+   debug "executing $MYFILE"
+   /bin/bash "$@"
+fi
+
+}
+
+CHARSET=utf8
+
+# replaces a command called mountpoint that doesn't work with spaces on filenames
+function check_mount {
+
+for i in `cat /proc/mounts | cut -d' ' -f2`; do
+  NAMEWITH040=`echo $1 | sed 's/ /\\\040/g'`;
+  MYNAME=${NAMEWITH040%/}
+  if [ "x$MYNAME" = "x$i" ]; then
+   return 0
+  fi
+done
+
+return 1
+
+}
+
+# waits for a certain user process to be up
+function waitproc
+{
+
+PROCNAME=$1
+USER=$2
+DELAY=$3
+
+READY=1
+while [ ! $READY -eq 0 ] ; do
+  sleep $DELAY
+  pgrep -u $USER $PROCNAME >& /dev/null
+  READY=$?
+done
+
+sleep $DELAY
+
+}
+
+function mountshare
+{
+
+SERVER=$1
+SHARE=$2
+SERVERNAME=$3
+DOMAIN=$7
+CIFSVERSION=$8
+
+if [ -z $CIFSVERSION ]; then
+  CIFSVERSION=$CIFSVERSION_DEFAULT
+fi
+
+# this is to workaround accesses from other users
+# when server has unix extensions = yes and since
+# the client "nounix" options breaks things
+GID=0
+
+# other possibilities for GID
+#GID=`id -g`
+#GID=`getent group "domain admins" |cut -d ":" -f 3`
+
+# not under the user's $HOME as it could be NFS mounted
+MDIR="/tmp/`whoami`/mnt/"
+TDIR="$MDIR/$SHARE"
+VERIFYSUDO=$6
+SUDO=""
+MOUNTED=no
+
+DISTRIB_RELEASE=""
+if [ -f /etc/lsb-release ]; then
+   . /etc/lsb-release
+fi
+
+if [ "$DISTRIB_RELEASE" = 12.04 ] || [ "$DISTRIB_RELEASE" = 16.04 ] || [ "$DISTRIB_RELEASE" = 20.04 ] || [ "$VERIFYSUDO" = "true" ]; then
+    SUDO="sudo"
+else
+    SUDO=""
+fi
+
+# check if parent dir exists
+if [ ! -d "$MDIR" ]; then
+  mkdir -p "$MDIR"
+fi
+
+# enforce permissions on parent dir
+chmod 700 "$MDIR"
+
+# check if target dir exists
+if [ ! -d "$TDIR" ]; then
+  mkdir -p "$TDIR"
+fi
+
+# check if it is already mounted
+
+check_mount "$TDIR"
+rc=$?
+
+# do nothing if it is already mounted
+
+if [ $rc -eq 0 ]; then
+  debug "$TDIR already mounted. Will not remount."
+  MOUNTED=yes
+fi
+
+# a opcao nodsf e' necessaria para certas versoes do samba server como WA de um bug
+# https://bugs.launchpad.net/ubuntu/+source/samba/+bug/286828
+# idem para a opcao nobrl
+# https://bugs.launchpad.net/ubuntu/+source/openoffice.org/+bug/578402
+if [ ! X$MOUNTED = "Xyes" ]; then
+
+  if [ ! -z $DOMAIN ]; then
+      DOMAINSTR=",domain=$DOMAIN"
+  else
+      DOMAINSTR=""
+  fi
+
+  $SUDO /sbin/mount.cifs "//$SERVER/$SHARE" "$TDIR" -o nobrl,noacl,nodfs,suid,username=$4,password="$5",uid=$UID,gid=$GID,forceuid,forcegid,file_mode=0600,dir_mode=0700,vers=$CIFSVERSION,iocharset=$CHARSET${DOMAINSTR}
+  rc=$?
+  if [ ! $rc -eq 0 ]; then
+    debug "Problem mounting //$SERVER/$SHARE on $TDIR."
+    return
+  fi
+fi
+
+# clear $SHARE from "/"s, if we are mounting a subdir let's keep only the last component
+
+DISPLAYNAME=`echo $SHARE | awk -F/ '{ print $NF }'`
+
+# create a symlink on the Desktop, test for existence
+# or it will create a second symlink inside the share
+
+LINKNAME="$HOME/Desktop/$DISPLAYNAME em $SERVER"
+if [ ! -h "$LINKNAME" ]; then
+  ln -s "$TDIR" "$LINKNAME"
+fi
+
+}
+
+############################ MOZILLA GENERIC FUNCTIONS ################################
+
+function mozilla_init_profile
+{
+
+PROFILENAME=$PROJECTNAME
+BASEDIR=$1
+INSTALLHASH=$2
+
+if [ ! -d $BASEDIR/$PROFILENAME.default ]; then
+  mkdir -p $BASEDIR/$PROFILENAME.default
+  touch  $BASEDIR/$PROFILENAME.default/prefs.js
+fi
+
+if [ ! -f $BASEDIR/installs.ini ]; then
+  echo -e "[$INSTALLHASH]\\nDefault=$PROFILENAME.default\\nLocked=1" > $BASEDIR/installs.ini
+fi
+
+if [ ! -f $BASEDIR/profiles.ini ]; then
+  echo -e "[Install$INSTALLHASH]\\nDefault=$PROFILENAME.default\\nLocked=1" > $BASEDIR/profiles.ini
+  echo -e "\\n[Profile0]\\nName=default\\nIsRelative=1\\nPath=$PROFILENAME.default" >> $BASEDIR/profiles.ini
+fi
+
+}
+
+function mozilla_set_pref
+{
+
+# the prefs.js file must exist in order for this to work
+# that is ensured by the init_firefox_profile function 
+
+BASEDIR=$1
+NAME=$2
+VALUE=$3
+TYPE=$4 # equals 1 if pref value is a string
+PREFS_LIST=`find $BASEDIR -name prefs.js`
+
+for PREFS in $PREFS_LIST; do
+  if [ ! -z $PREFS ] && [ -f $PREFS ]; then
+    cp -f  $PREFS $PREFS.bak
+    cat $PREFS.bak |grep -v \"$NAME\" > $PREFS
+    if [ $TYPE = 1 ]; then
+      echo "user_pref(\"$NAME\", \"$VALUE\");" >> $PREFS
+    else
+      echo "user_pref(\"$NAME\", $VALUE);" >> $PREFS
+    fi
+  fi
+done
+
+
+}
+
+############################ THUNDERBIRD FUNCTIONS ################################
+
+TBDIR="$HOME/.thunderbird"
+
+function thunderbird_init_profile
+{
+
+mozilla_init_profile "$TBDIR" "$THUNDERBIRD_INSTALL_HASH"
+
+}
+
+function thunderbird_set_pref
+{
+
+mozilla_set_pref "$TBDIR" "$@"
+
+}
+
+# security connection pref is called socketType for IMAP and try_ssl for SMTP
+# 0 - NONE
+# 1 - STARTTLS
+# 2 - SSL/TLS
+
+# authentication method pref is called authMethod for both IMAP and SMTP
+# 1 - No autehntication (SMTP only)
+# 3 - Password
+# 4 - Encrypted password
+# 5 - Kerberos / GSSAPI
+# 6 - NTLM
+# 7 - TLS Cert (IMAP only)
+
+function thunderbird_set_id_imap_smtp
+{
+
+SERVER=$1
+USERNAME=$2
+IDNAME=$3
+EMAIL=$4
+DISPLAYNAME="$5"
+
+IMAPPORT=$6
+IMAPSEC=$7
+IMAPAUTH=$8
+
+SMTPPORT=$9
+SMTPSEC=${10}
+SMTPAUTH=${11}
+
+thunderbird_set_pref mail.identity.id1.fullName "$IDNAME" 1
+thunderbird_set_pref mail.identity.id1.useremail "$EMAIL" 1
+thunderbird_set_pref mail.identity.id1.drafts_folder_picker_mode "0" 1
+thunderbird_set_pref mail.identity.id1.smtpServer "smtp1" 1
+thunderbird_set_pref mail.identity.id1.valid true 0
+thunderbird_set_pref mail.identity.id1.archive_folder "imap://$USERNAME@$SERVER/Archives" 1
+thunderbird_set_pref mail.identity.id1.draft_folder "imap://$USERNAME@$SERVER/Drafts" 1
+thunderbird_set_pref mail.identity.id1.fcc_folder "imap://$USERNAME@$SERVER/Sent" 1
+thunderbird_set_pref mail.identity.id1.stationery_folder "imap://$USERNAME@$SERVER/Templates" 1
+
+thunderbird_set_pref mail.server.server1.userName "$USERNAME" 1
+thunderbird_set_pref mail.server.server1.hostname "$SERVER" 1
+thunderbird_set_pref mail.server.server1.name "$DISPLAYNAME" 1
+thunderbird_set_pref mail.server.server1.port $IMAPPORT 0
+thunderbird_set_pref mail.server.server1.socketType $IMAPSEC 0
+thunderbird_set_pref mail.server.server1.authMethod $IMAPAUTH 0
+thunderbird_set_pref mail.server.server1.check_new_mail true 0
+thunderbird_set_pref mail.server.server1.type "imap" 1
+
+thunderbird_set_pref mail.smtpserver.smtp1.hostname "$SERVER" 1
+thunderbird_set_pref mail.smtpserver.smtp1.username "$USERNAME" 1
+thunderbird_set_pref mail.smtpserver.smtp1.description "$DISPLAYNAME" 1
+thunderbird_set_pref mail.smtpserver.smtp1.port $SMTPPORT 0
+thunderbird_set_pref mail.smtpserver.smtp1.try_ssl $SMTPSEC 0
+thunderbird_set_pref mail.smtpserver.smtp1.authMethod $SMTPAUTH 0
+thunderbird_set_pref mail.smtpservers "smtp1" 1
+
+thunderbird_set_pref mail.account.account1.identities "id1" 1
+thunderbird_set_pref mail.account.account1.server "server1" 1
+thunderbird_set_pref mail.account.account2.server "server2" 1
+
+thunderbird_set_pref mail.accountmanager.defaultaccount "account1" 1
+thunderbird_set_pref mail.accountmanager.localfoldersserver "server2" 1
+
+thunderbird_set_pref mail.server.server2.hostname "Local Folders" 1
+thunderbird_set_pref mail.server.server2.name "Pastas Locais" 1
+thunderbird_set_pref mail.server.server2.type  "none" 1
+thunderbird_set_pref mail.server.server2.userName "nobody" 1
+
+# account visibility - we include here more than we need: we've seen up to 11 acconts for a user that multiple mail and chat accounts
+# thunderbird removes the accounts that are not mail accounts
+thunderbird_set_pref mail.accountmanager.accounts "account1,account2,account3,account4,account5,account6,account7,account8,account9,account10,account11,account12,account13,account14,account15" 1
+
+}
+
+# requires the Lightning extension
+function thunderbird_set_caldav
+{
+
+SERVER=$1
+USERNAME=$2
+CALNAME=$3
+
+thunderbird_set_pref calendar.registry.e288b86e-75bf-44d2-8abd-f61e847032f8.uri "https://$SERVER/dav/$USERNAME/Calendar" 1
+thunderbird_set_pref calendar.registry.e288b86e-75bf-44d2-8abd-f61e847032f8.imip.identity.key "id1" 1
+thunderbird_set_pref calendar.registry.e288b86e-75bf-44d2-8abd-f61e847032f8.name "$CALNAME" 1
+thunderbird_set_pref calendar.registry.e288b86e-75bf-44d2-8abd-f61e847032f8.type "caldav" 1
+thunderbird_set_pref calendar.registry.329de7c7-a831-4d67-b13d-6b836bfff235.calendar-main-default true 0
+thunderbird_set_pref calendar.registry.e288b86e-75bf-44d2-8abd-f61e847032f8.calendar-main-in-composite true 0
+
+}
+#------------------------------------------------------------------------------------------------------------------------------------------
+# requires the Cardbook extension
+function thunderbird_set_carddav
+{
+
+SERVER=$1
+USERNAME=$2
+ACCNAME=$3
+
+thunderbird_set_pref extensions.cardbook.data.C6FDD87F-E590-0001-4A39-4AE0103A4570.id "C6FDD87F-E590-0001-4A39-4AE0103A4570" 1
+thunderbird_set_pref extensions.cardbook.data.C6FDD87F-E590-0001-4A39-4AE0103A4570.user "$USERNAME" 1
+thunderbird_set_pref extensions.cardbook.data.C6FDD87F-E590-0001-4A39-4AE0103A4570.url "https://$SERVER/dav/$USERNAME/Contacts" 1
+thunderbird_set_pref extensions.cardbook.data.C6FDD87F-E590-0001-4A39-4AE0103A4570.name "$ACCNAME" 1
+thunderbird_set_pref extensions.cardbook.data.C6FDD87F-E590-0001-4A39-4AE0103A4570.type "CARDDAV" 1
+thunderbird_set_pref extensions.cardbook.data.C6FDD87F-E590-0001-4A39-4AE0103A4570.enabled true 0
+thunderbird_set_pref extensions.cardbook.data.C6FDD87F-E590-0001-4A39-4AE0103A4570.enabled true 0
+thunderbird_set_pref extensions.cardbook.defaultLook false 0
+thunderbird_set_pref extensions.cardbook.panesView "modern" 1
+thunderbird_set_pref extensions.cardbook.buttonAddress false 0
+thunderbird_set_pref extensions.cardbook.buttonCategories false 0
+thunderbird_set_pref extensions.cardbook.buttonImpp false 0
+thunderbird_set_pref extensions.cardbook.buttonNote false 0
+thunderbird_set_pref extensions.cardbook.preferEmailEdition true 0
+thunderbird_set_pref extensions.cardbook.preferEmailPref true 0
+thunderbird_set_pref extensions.cardbook.preferAddressEdition true 0
+thunderbird_set_pref extensions.cardbook.localizeEngine "GoogleMaps" 1
+thunderbird_set_pref extensions.cardbook.localizeTarget "out" 1
+
+}
+#------------------------------------------------------------------------------------------------------------------------------------------>
+
+# requires sdrtest, moz_encrypt.py
+function thunderbird_set_zimbra_creds
+{
+SERVER=$1
+USERNAME=$2
+PASSWORD=$3
+PROFILENAME=$PROJECTNAME
+DESTDIR=$TBDIR/$PROFILENAME.default
+LOGINFILE=$DESTDIR/logins.json
+CARDBOOKGUI=$DESTDIR/xulstore.json
+SDRUTIL=/usr/local/AR/bin/sdrtest
+ENCCOMMAND="python /usr/local/AR/bin/moz_encrypt.py -d $DESTDIR"
+
+# create initial key3.db plus an SDR encryption key
+# only the -d argument matters
+$SDRUTIL -t foo -d $DESTDIR -o /tmp/foobarSDR.txt
+
+
+ENCUSERNAME=`$ENCCOMMAND -s $USERNAME`
+ENCPASSWORD=`$ENCCOMMAND -s $PASSWORD`
+TIME=$(( `date +%s` * 1000 ))
+
+# entry insertion
+
+echo "{\"nextId\":5,\"logins\":[" >> $LOGINFILE
+
+ID=1
+GUID=`uuidgen`
+echo "{\"id\":$ID,\"hostname\":\"imap://$SERVER\",\"httpRealm\":\"imap://$SERVER\",\"formSubmitURL\":null,\"usernameField\":\"\",\"passwordField\":\"\",\"encryptedUsername\":\"$ENCUSERNAME\",\"encryptedPassword\":\"$ENCPASSWORD\",\"guid\":\"{$GUID}\",\"encType\":1,\"timeCreated\":$TIME,\"timeLastUsed\":$TIME,\"timePasswordChanged\":$TIME,\"timesUsed\":1}," >> $LOGINFILE
+
+ID=2
+GUID=`uuidgen`
+echo "{\"id\":$ID,\"hostname\":\"smtp://$SERVER\",\"httpRealm\":\"smtp://$SERVER\",\"formSubmitURL\":null,\"usernameField\":\"\",\"passwordField\":\"\",\"encryptedUsername\":\"$ENCUSERNAME\",\"encryptedPassword\":\"$ENCPASSWORD\",\"guid\":\"{$GUID}\",\"encType\":1,\"timeCreated\":$TIME,\"timeLastUsed\":$TIME,\"timePasswordChanged\":$TIME,\"timesUsed\":1}," >> $LOGINFILE
+
+ID=3
+GUID=`uuidgen`
+echo "{\"id\":$ID,\"hostname\":\"https://$SERVER\",\"httpRealm\":\"Zimbra\",\"formSubmitURL\":null,\"usernameField\":\"\",\"passwordField\":\"\",\"encryptedUsername\":\"$ENCUSERNAME\",\"encryptedPassword\":\"$ENCPASSWORD\",\"guid\":\"{GUID}\",\"encType\":1,\"timeCreated\":$TIME,\"timeLastUsed\":$TIME,\"timePasswordChanged\":$TIME,\"timesUsed\":1}," >> $LOGINFILE
+
+ID=4
+GUID=`uuidgen`
+echo "{\"id\":$ID,\"hostname\":\"https://$SERVER\",\"httpRealm\":null,\"formSubmitURL\":\"User login\",\"usernameField\":\"\",\"passwordField\":\"\",\"encryptedUsername\":\"$ENCUSERNAME\",\"encryptedPassword\":\"$ENCPASSWORD\",\"guid\":\"{$GUID}\",\"encType\":1,\"timeCreated\":$TIME,\"timeLastUsed\":$TIME,\"timePasswordChanged\":$TIME,\"timesUsed\":1}]," >> $LOGINFILE
+
+echo "\"disabledHosts\":[],\"version\":1}" >> $LOGINFILE
+}
+
+#------------------------------------------------------------------------------------------------------------------------------------------<
+
+function thunderbird_set_zimbra
+{
+
+SERVER=$1
+USERNAME=$2
+IDNAME="$3"
+DISPLAYNAME="$4"
+PASSWORD=$5
+
+EMAIL=$USERNAME
+
+# preload the credentials - no questions asked
+
+if [ ! -x $PASSWORD ]; then
+  thunderbird_set_zimbra_creds $SERVER $USERNAME $PASSWORD
+fi
+
+# NOT NECESSARY ANYMORE - STAAYS HERE JUST IN CASE - mark the configuration as done
+# this part of the function backs off if the configuration is already done
+#if [ -e $TBDIR/.zimbra ]; then
+#  return
+#fi
+
+# reference values are documented near the function definition
+
+thunderbird_set_id_imap_smtp $SERVER $USERNAME "$IDNAME" $EMAIL "$DISPLAYNAME" 993 3 3 25 2 3
+thunderbird_set_caldav $SERVER $USERNAME "$DISPLAYNAME"
+thunderbird_set_carddav $SERVER $USERNAME "$DISPLAYNAME"
+
+
+# NOT NECESSARY ANYMORE - STAAYS HERE JUST IN CASE - mark the configuration as done
+# touch $TBDIR/.zimbra
+
+}
+
+############################ FIREFOX FUNCTIONS ################################
+
+FFDIR="$HOME/.mozilla/firefox"
+
+function firefox_init_profile
+{
+
+mozilla_init_profile "$FFDIR" "$FIREFOX_INSTALL_HASH"
+
+}
+
+function firefox_set_pref
+{
+
+mozilla_set_pref "$FFDIR" "$@"
+
+}
+
+function firefox_set_proxy
+{
+
+PROXYTYPE=$1
+URL=$2
+PORT=$3
+NOPROXY="$4"
+firefox_set_pref network.proxy.type $PROXYTYPE 0
+
+# http://kb.mozillazine.org/Network.proxy.type
+
+case $PROXYTYPE in 
+  0)  
+    ;;
+  1) 
+    firefox_set_pref network.proxy.http $URL 1
+    firefox_set_pref network.proxy.http_port $PORT 0
+    firefox_set_pref network.proxy.ssl $URL 1 0
+    firefox_set_pref network.proxy.ssl $PORT 0
+    firefox_set_pref network.proxy.no_proxies_on "$NOPROXY" 1
+    ;;
+  2)
+    firefox_set_pref network.proxy.autoconfig_url $URL 1
+    ;;
+  3)
+    ;;
+  4)  
+    ;;
+  5)  
+esac
+
+}
+
+function firefox_set_sso
+{
+
+  firefox_set_pref network.automatic-ntlm-auth.trusted-uris $1 1
+  firefox_set_pref network.negotiate-auth.trusted-uris  $1 1
+
+}
+
+function firefox_set_ntlm_auth_link
+{
+
+if [ ! -e $HOME/ntlm_auth ]; then
+  ln -s /usr/bin/ntlm_auth $HOME/ntlm_auth
+fi
+
+}
+
+function firefox_set_homepage 
+{
+
+  firefox_set_pref browser.startup.homepage $1 1
+
+}
+
+function firefox_install_CA
+{
+CERTURL=$1
+CERTNICK="$2"
+PROFILENAME=$PROJECTNAME
+TMPFILE=$HOME/tmp/tmpcert.crt
+
+  certutil  -d $FFDIR/$PROFILENAME.default/ -L -n "$CERTNICK" >& /dev/null
+  RC=$?
+
+  if [ ! $RC -eq 0 ]; then
+    debug "Installing certificate $CERTURL with name $CERTNICK"
+    if [[ "$CERTURL" =~ "http://" ]] || [[ "$CERTURL" =~ "https://" ]] ; then
+      wget -O $TMPFILE $CERTURL
+      CERTFILE=$TMPFILE
+    else
+      CERTFILE=$CERTURL
+    fi
+    certutil  -d $FFDIR/$PROFILENAME.default/ -A -t "TC,c,c"  -i $CERTFILE -n "$CERTNICK"
+    rm -f $TMPFILE
+  fi
+
+}
+
+# WARNING this function requires the homes share mounted
+function firefox_import_bookmarks {
+
+  MYUSER=$1
+  MYTAG="${PROJECTNAME}-firefox-bookmarks"
+  HOMES_SHARE_DIR="/tmp/$MYUSER/mnt/homes"
+  BOOKMARK_DIR="${HOMES_SHARE_DIR}/bookmarks"
+  PROFILE_BASE_DIR="/home/${MYUSER}/.mozilla/firefox"
+  
+  # check if share homes is mounted
+  mount | grep $HOMES_SHARE_DIR &> /dev/null
+  
+  if [ $? -eq 0 ];then
+    PROFILE_NAME=`firefox_find_profile_dir "${PROFILE_BASE_DIR}"`
+    cp "${BOOKMARK_DIR}/places.sqlite" "${PROFILE_BASE_DIR}/${PROFILE_NAME}/"
+    logger -p local1.notice -t $MYTAG "Importing bookmarks from ${BOOKMARK_DIR} to ${PROFILE_BASE_DIR}/${PROFILE_NAME}/"
+  else
+    logger -p local1.notice -t $MYTAG "Homes share is not mounted --> Moving along."
+  fi
+}
+
+# returns the first found directory on PROFILE_BASE_DIR
+function firefox_find_profile_dir {
+
+    PROFILE_BASE_DIR=$1
+    # this command will grep the name of the default profile
+    # from the installs file, most of the times the profile
+    # used will be the default one, tipical users won't change profile
+    grep Default $PROFILE_BASE_DIR/installs.ini | awk -F '=' {'print $2'}
+
+}
+
+############################ CHROME FUNCTIONS ################################
+
+function chrome_import_bookmarks {
+
+  MYUSER=$1
+  MYTAG="${PROJECTNAME}-chrome-bookmarks"
+  HOMES_SHARE_DIR="/tmp/$MYUSER/mnt/homes"
+  BOOKMARK_DIR="${HOMES_SHARE_DIR}/bookmarks"
+  PROFILE_BASE_DIR="/home/${MYUSER}/.config/google-chrome/Default"
+  
+
+  # check if share homes is mounted
+  mount | grep $HOMES_SHARE_DIR &> /dev/null
+  
+  if [ $? -eq 0 ];then
+    cp "${BOOKMARK_DIR}/Bookmarks" "${PROFILE_BASE_DIR}/"
+    logger -p local1.notice -t $MYTAG "Importing bookmarks from ${BOOKMARK_DIR} to ${PROFILE_BASE_DIR}/"
+  else
+    logger -p local1.notice -t $MYTAG "Homes share is not mounted --> Moving along."
+  fi
+}
+
+############################ LINUX FUNCTIONS ################################
+
+function system_set_proxy
+{
+
+AUTOCONFIG_URL="http://wpad/wpad.dat"
+gconftool-2 --type string --set /system/proxy/mode "auto"
+gconftool-2 --type string --set /system/proxy/autoconfig_url $AUTOCONFIG_URL
+
+}
+
+function linux_init_profile
+{
+
+PTDIR="$HOME/Área de Trabalho"
+TMPDIR="$HOME/tmp"
+ICONCACHE=/var/tmp/kdecache-$USER/icon-cache.kcache
+RDESKTOPDIR=$HOME/.rdesktop
+
+# we MUST have a Desktop
+
+if [[ $LANG =~ "pt_PT" ]] && [ ! -e $HOME/Desktop ]; then
+  if [ ! -e "$PTDIR" ]; then mkdir "$PTDIR"; fi
+  ln -s "$PTDIR" $HOME/Desktop
+else
+  if [ ! -e $HOME/Desktop ]; then mkdir  $HOME/Desktop; fi
+fi
+
+# user must have a tmp
+
+if [ ! -e "$TMPDIR" ]; then mkdir "$TMPDIR"; fi
+
+# clear cached icons
+
+rm -f $ICONCACHE
+
+
+# clear rdesktop dir - bad but necessary
+
+if [ -d $RDESKTOPDIR ]; then 
+  rm -rf  $RDESKTOPDIR; 
+fi
+
+
+}
+
+# set message of the day to be displayed and deleted by a desktop autostart script
+
+function linux_set_motd
+{
+
+MESSAGE=$1
+TDIR="/tmp/`whoami`"
+
+# check if target dir exists
+if [ ! -d "$TDIR" ]; then
+  mkdir -p "$TDIR"
+fi
+
+echo "$MESSAGE" > $TDIR/motd_POLICY
+
+}
+
+# push an application shortcut to a policy defined dir (default = Desktop)
+
+function linux_push_shortcut
+{
+
+NAME="$1"
+DESC="$2"
+ICON="$3"
+CMD="$4"
+TDIR="$5"
+
+if [ -z $TDIR ]; then
+    TDIR="$HOME/Desktop"
+fi
+
+FILENAME="$TDIR/${NAME}_POLICYAPP.desktop"
+
+echo -e "\
+[Desktop Entry]\n\
+GenericName=${DESC}\n\
+GenericName[en_US]=${DESC}\n\
+Name=${NAME}\n\
+Name[en_US]=${NAME}\n\
+Icon=${ICON}\n\
+Exec=${CMD}\n\
+Type=Application\n\
+X-KDE-StartupNotify=false"\
+> "$FILENAME"
+
+# desktop file must be executable to avoid popup confirmation
+chmod +x "$FILENAME"
+
+}
+
+function linux_push_RDP_application
+{
+
+# MANDATORY ARGS
+NAME="$1"
+DESC="$2"
+ICON="$3"
+SIZE="$4"
+DEPTH="$5"
+KEYBOARD="$6"
+SERVER="$7"
+SEAMLESSAPP="$8"
+# END OF MANDATORY ARGS
+PRINTERS="$9"
+TDIR="${10}"
+LOCALDIR="${11}"
+# for now, if you want to pass creds all the previous params must be filled as well
+USERNAME="${12}"
+PASSWORD="${13}"
+DOMAIN="${14}"
+SEAMLESSAPPDIR="${15}"
+CREDS=
+
+# Windows 2003
+#PRNDRIVER="Apple LaserWriter 12/640 PS"
+
+# Windows 2008
+PRNDRIVER="PS Driver for Universal Print"
+
+# Windows 7
+#PRNDRIVER="MS Publisher Imagesetter"
+
+
+if [ -z "$TDIR" ]; then
+    TDIR="$HOME/Desktop"
+fi
+
+ARGSDIR=
+if [ ! -z "$LOCALDIR" ]; then
+    for d in $LOCALDIR; do
+        echo "d is $d"
+        SHARENAME=`echo $d | cut -d ':' -f 1`
+        DIRNAME=`echo $d | cut -d ':' -f 2`
+        ARGSDIR="$ARGSDIR -r disk:$SHARENAME=$DIRNAME"
+    done
+else
+  ARGSDIR=
+fi
+
+if [ ! -z $USERNAME ]; then
+  CREDS="-u $USERNAME"
+fi
+
+if [ ! -z $PASSWORD ]; then
+  CREDS="$CREDS -p $PASSWORD"
+fi
+
+if [ ! -z $DOMAIN ]; then
+  CREDS="$CREDS -d $DOMAIN"
+fi
+
+# send the printers as arguments to the RDP client
+
+ARGSPRN=
+for p in $PRINTERS; do
+  ARGSPRN="$ARGSPRN -r printer:$p='$PRNDRIVER'"
+done
+
+if [ "$SEAMLESSAPP" = "none" ]; then
+  linux_push_shortcut "$NAME" "$DESC" "$ICON"  "rm -f ~/.rdesktop/licence.*; rdesktop -g $SIZE -a $DEPTH -k $KEYBOARD -T \"$DESC\" $ARGSDIR $ARGSPRN $CREDS $SERVER" "$TDIR"
+else
+  linux_push_shortcut "$NAME" "$DESC" "$ICON"  "rm -f ~/.rdesktop/licence.*; rdesktop -a $DEPTH -k $KEYBOARD -c \"$SEAMLESSAPPDIR\" -T \"$DESC\" $ARGSDIR $ARGSPRN $CREDS $SERVER -A -s \"%ProgramFiles%\\\\\ThinLinc\\\\\WTSTools\\\\\seamlessrdpshell.exe $SEAMLESSAPP\" " "$TDIR"
+fi
+
+}
+
+# pushing_desktop_information needs the conky package installed
+
+# the sleep call in this function is a workaround for KDE autostart race condition (?)
+
+function linux_push_desktop_information_autostart
+{
+
+AUTOSTARTDIR=$1
+ICON=checkbox
+
+linux_push_shortcut "desktop-information" "Display machine information on the user desktop" $ICON 'sleep 30; conky -d  -a top_right -t "Informação do Sistema \\n\\nIP: `LANG=en_US /sbin/ifconfig eth0 |grep "inet addr" |cut -d ":" -f 2| cut -d " " -f 1` \\nhostname: `hostname` \\nuser: `whoami`"  ' $AUTOSTARTDIR
+
+}
+
+function linux_push_motd_autostart
+{
+
+AUTOSTARTDIR=$1
+CMD="$2"
+ICON=checkbox
+
+if [ ! -d $AUTOSTARTDIR ];then
+    mkdir $AUTOSTARTDIR
+fi
+
+linux_push_shortcut "motd" "Display message of the day" $ICON "$CMD \"\`cat /tmp/$USER/motd_POLICY\`\" " $AUTOSTARTDIR
+
+}
+
+############################ KDE FUNCTIONS ################################
+
+function kde4_set_wallpaper
+{
+
+# This is the legacy KDE 4 version of the function kde_set_wallpaper.
+# In principle it's not needed anymore and you should use kde_set_wallpaper,
+# which has been modified for the KDE 5 shipped with ubuntu 16.04.
+
+# this function is not pretty but KDE lacks a dynamic configuration interface
+# the plasma-desktop-appletsrc from /etc/skel must have some wallpaper defined
+# for this to work
+
+RCFILE="$HOME/.kde/share/config/plasma-desktop-appletsrc"
+OLDEXPR="`cat $RCFILE |grep wallpaper=`"
+NEWEXPR="wallpaper=$1"
+
+replaceExpr $RCFILE $OLDEXPR $NEWEXPR
+
+}
+
+function kde_set_wallpaper
+{
+
+  # This function works with KDE 5 shipped with ubuntu 16.04.
+
+  # The plasma-desktop-appletsrc from /etc/skel must have some wallpaper defined
+  # for this to work.
+
+  RCFILE="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
+  LINESTART="Image=file://"
+  # the anchor ^ to the start of the line is required not to match e.g.
+  # customButtonImage=file:///home/someuser/Pictures/somepicture.png
+  OLDEXPR="`cat $RCFILE |grep \"^${LINESTART}\"`"
+  NEWEXPR="${LINESTART}$1"
+
+  replaceExpr $RCFILE $OLDEXPR $NEWEXPR
+
+}
+
+#
+# These functions were created in order to enforce workstation
+# autolock timer and lock grace
+#
+function kde_set_lock_time() {
+
+USERNAME=$1
+HOME_DIR="/home/$USERNAME"
+DEFAULT_TIMEOUT=$2 # minutes
+
+kwriteconfig5 --file ${HOME_DIR}/.config/kscreenlockerrc --group Daemon --key Timeout ${DEFAULT_TIMEOUT};
+qdbus org.kde.screensaver /ScreenSaver configure
+
+}
+
+
+function kde_set_lock_grace() {
+
+USERNAME=$1
+HOME_DIR="/home/$USERNAME"
+DEFAULT_GRACE=$2 # seconds
+
+kwriteconfig5 --file ${HOME_DIR}/.config/kscreenlockerrc --group Daemon --key LockGrace ${DEFAULT_GRACE};
+qdbus org.kde.screensaver /ScreenSaver configure
+
+}
+
+# the purpose of this policy is to
+# fix gimp tooltip bug
+# see issue #68
+function kde_toggle_color_export(){
+
+    USERNAME=$1
+    HOME_DIR="/home/$USERNAME"
+    VALUE=$2
+
+    if [ $VALUE = true ] || [ $VALUE = false ];then
+        kwriteconfig5 --file ${HOME_DIR}/.config/kcmdisplayrc --group "X11" --key "exportKDEColors" $VALUE
+        exit 0
+    fi
+    
+    echo "The provided value does not match the available options."
+    exit 1
+}
+
+# similar functions will NOT work on GNOME as it doesn't do shell expansion 
+# on desktop files
+
+function kde_push_desktop_information_autostart
+{
+
+linux_push_desktop_information_autostart $HOME/.kde/Autostart 
+
+}
+
+function kde_push_motd_autostart
+{
+
+linux_push_motd_autostart $HOME/.config/autostart "kdialog --msgbox"
+
+}
+
+############################ GNOME FUNCTIONS ################################
+
+function gnome_set_pref
+{
+NAME=$1
+VALUE="$2"
+TYPE=$3 # equals 1 if pref value is a string --10.04
+
+ gconftool-2  --type $TYPE  --set $NAME "$VALUE"
+}
+
+function gnome3_set_pref
+{
+
+NAME=$1
+VALUE="$2"
+TYPE=$3
+
+dbus-launch gsettings set $NAME $TYPE "$VALUE"
+}
+
+
+function gnome_check_version
+# xvfb must be installed for this to work 
+{
+GNOME_VERSION=$(xvfb-run gnome-session.bin --version | sed -n 1p | cut -d' ' -f2 | cut -d. -f1)
+ if [ $GNOME_VERSION -eq 3 ]; then
+   echo "3"
+ else
+   echo "2"
+ fi
+}
+
+function gnome_set_wallpaper
+{
+WALLPAPER=$1
+VERSION=`gnome_check_version`
+
+if [ "$VERSION" = "3" ]; then
+        gnome3_set_pref org.gnome.desktop.background "file://$WALLPAPER" picture-uri
+else
+        gnome_set_pref /desktop/gnome/background/picture_filename $WALLPAPER string
+fi
+}
+
+############################ COMPUTER POLICY FUNCTIONS ################################
+
+# to use only for local users
+function set_local_passwd
+{
+USERNAME=$1
+PASSWORD=$2
+
+echo -e "$2\n$2" | (passwd $1)
+
+}
+
+function set_java
+{
+
+SOURCEDIR="$1"
+JAVATAR=$SOURCEDIR/java/java.tar.gz
+JAVADIR=/opt/
+JAVATMP=/tmp
+MOZPLUGIN=/usr/lib/mozilla/plugins/libnpjp2.so
+
+# do nothing is there is no Java archive available
+if [ ! -f $JAVATAR ]; then
+  return
+fi
+
+# that tar archive must create $JAVADIR/java
+tar -C $JAVATMP -zxf $JAVATAR
+
+INSTVER=`java -version 2>&1 |head -n 1`
+NEWVER=`$JAVATMP/bin/java -version 2>&1 |head -n 1`
+
+if [ "x$INSTVER" != x"x$NEWVER" ]; then 
+  if [ -d $JAVADIR/java ]; then
+    rm -rf $JAVADIR/java
+  fi
+  mv $JAVATMP/java $JAVADIR
+fi
+
+# create symlinks
+for NAME in java java_vm javaws jcontrol ; do
+  rm -f /usr/bin/$NAME
+  ln -s /opt/java/bin/$NAME /usr/bin/$NAME
+done
+
+# firefox plugin
+rm -f $MOZPLUGIN
+ln -s $JAVADIR/java/lib/i386/libnpjp2.so $MOZPLUGIN
+
+}
+
+function set_icons
+{
+
+SOURCEDIR="$1"
+ICONDIR=/opt/icons
+
+if [ ! -d $ICONDIR ]; then
+  mkdir $ICONDIR
+fi
+
+# don't get ICONDIR wrong!!
+rsync -az --delete $SOURCEDIR/icons/ $ICONDIR
+
+}
+
+
+function set_auth_keys
+{
+
+SOURCEDIR="$1/auth_keys"
+FILENAME=sysadmin
+KEYFILE=authorized_keys
+SUPUSER=supervisor
+SUPDIR=/home/supervisor
+PASS=PUTAPASSWORDHERE
+
+if [ ! -d $SUPDIR/.ssh ]; then
+ mkdir $SUPDIR/.ssh
+ chmod 700 $SUPDIR/.ssh
+fi
+
+cp -f $SOURCEDIR/sysadmin /tmp
+openssl enc -d -aes-256-cbc -a -salt -pass pass:$PASS -in /tmp/$FILENAME -out $SUPDIR/.ssh/$KEYFILE
+chmod 644 $SUPDIR/.ssh/$KEYFILE
+chown -R $SUPUSER:$SUPUSER  $SUPDIR/.ssh
+rm -f /tmp/$FILENAME
+
+}
+
+function fix_xrdp
+{
+
+SOURCEDIR="$1/xrdp"
+MYPKG=xrdp_0.6.0-1_i386.deb
+
+VERSION=`dpkg -l xrdp |tail -n 1 |awk '{print $3}'`
+
+if [ $VERSION != "0.6.0-1" ] && [ -f $SOURCEDIR/$MYPKG ]; then
+  service xrdp stop
+  apt-get purge -y xrdp
+  dpkg -i $SOURCEDIR/$MYPKG
+  backup_files /etc/xrdp/xrdp.ini
+  cp -f $SOURCEDIR/xrdp.ini.console /etc/xrdp/xrdp.ini
+  # tinha sido esquecido inicialmente
+  update-rc.d xrdp defaults
+  service xrdp start
+fi
+
+}
+
+function fix_misc_files
+{
+
+SOURCEDIR="$1/misc"
+
+cp -f $SOURCEDIR/K10auto-updates /etc/rc0.d/K10auto-updates
+cp -f $SOURCEDIR/calendar-pt-PT.jar /usr/lib/xul-ext/lightning/chrome/calendar-pt-PT.jar
+cp -f $SOURCEDIR/startkde /usr/bin/startkde
+
+}
+
+function adobe_init_profile
+{
+
+SOURCEDIR=$1
+
+# Adobe Reader prefs
+ADDIR=$HOME/.adobe/Acrobat/9.0/Preferences
+if  [ ! -d "$ADDIR" ]; then
+  # set Adobe Reader HTML Library
+  mkdir -p $ADDIR
+  echo "/usr/lib/kompozer" >$ADDIR/acrogre.conf
+  # security module and other defaults
+  [ -e $SOURCEDIR/reader_prefs ] && cp -f $SOURCEDIR/reader_prefs $ADDIR
+fi
+
+# Adobe Reader additional CAs
+ADDIR=$HOME/.adobe/Acrobat/9.0/Security
+if  [ ! -d "$ADDIR" ]; then
+  mkdir -p $ADDIR
+  [ -e $SOURCEDIR/addressbook.acrodata ] && cp -f $SOURCEDIR/addressbook.acrodata $ADDIR
+fi
+
+}
+
+########################## APPLICATION SPECIFIC FUNCTIONS #############################
+
+import_kdbx() {
+
+  MYUSER=$1
+
+  if [ -z $MYUSER ];then
+    logger -p local1.notice -t $MYTAG "can not execute -> user not specified"
+    return 1
+  fi
+
+  MYTAG="${PROJECTNAME}-keepassdbx-import"
+  HOMES_SHARE_DIR="/tmp/$MYUSER/mnt/homes"
+  
+  REMOTE_KDBX_DIR="${HOMES_SHARE_DIR}/keepass"
+  REMOTE_KDBX_FILE="${REMOTE_KDBX_DIR}/${MYUSER}_keys.kdbx"
+  
+  KDBX_DIR="/home/${MYUSER}/.moosh_keepass"
+  KDBX_FILE="${KDBX_DIR}/${MYUSER}_keys.kdbx"
+  
+  mount | grep $HOMES_SHARE_DIR &> /dev/null
+  
+  RES=$?
+  if [ $RES -eq 0 ];then
+  
+    logger -p local1.notice -t $MYTAG "share is mounted -> procede"
+
+    if [ -f "$REMOTE_KDBX_FILE" ]; then
+    
+      if [ ! -d $KDBX_DIR ]; then
+        mkdir $KDBX_DIR
+      fi
+      
+      MD5_LOCAL=`md5sum $KDBX_FILE | awk '{print $1}'`
+      MD5_REMOTE=`md5sum $REMOTE_KDBX_FILE | awk '{print $1}'`
+      
+      # both the MD5 variables have to be set
+      # so the if statement that compares them does not fail
+      if [ -z $MD5_LOCAL ];then
+        MD5_LOCAL="dummy"
+      fi
+      
+      # we only import if the files are different
+      if [ $MD5_LOCAL = $MD5_REMOTE ]; then
+        logger -p local1.notice -t $MYTAG "files are the same -> nothing to do"
+      else
+        cp -f $KDBX_FILE $KDBX_FILE.old
+        cp -f $REMOTE_KDBX_FILE $KDBX_FILE
+      fi
+    else
+      logger -p local1.notice -t $MYTAG "remote file does not exist"
+    fi
+
+  else
+    logger -p local1.notice -t $MYTAG "share is not mounted -> nothing to do"
+  fi
+
+}
+
+import_shortcuts_file(){
+
+  MYUSER=$1
+
+  if [ -z $MYUSER ];then
+    logger -p local1.notice -t $MYTAG "can not execute -> user not specified"
+    return 1
+  fi
+
+  MYTAG="${PROJECTNAME}-shortcuts-import"
+  HOMES_SHARE_DIR="/tmp/$MYUSER/mnt/homes"
+  
+  REMOTE_KDE_DIR="${HOMES_SHARE_DIR}/kde"
+  REMOTE_SHORTCUTS_FILE="${REMOTE_KDE_DIR}/khotkeysrc"
+  
+  KDE_DIR="/home/${MYUSER}/.config"
+  SHORTCUTS_FILE="${KDE_DIR}/khotkeysrc"
+  
+  mount | grep $HOMES_SHARE_DIR &> /dev/null
+  
+  RES=$?
+  if [ $RES -eq 0 ];then
+  
+    logger -p local1.notice -t $MYTAG "share is mounted -> procede"
+
+    if [ -f "$REMOTE_SHORTCUTS_FILE" ]; then
+      
+      MD5_LOCAL=`md5sum $SHORTCUTS_FILE | awk '{print $1}'`
+      MD5_REMOTE=`md5sum $REMOTE_SHORTCUTS_FILE | awk '{print $1}'`
+      
+      # both the MD5 variables have to be set
+      # so the if statement that compares them does not fail
+      if [ -z $MD5_LOCAL ];then
+        MD5_LOCAL="dummy"
+      fi
+      
+      # we only import if the files are different
+      if [ $MD5_LOCAL = $MD5_REMOTE ]; then
+        logger -p local1.notice -t $MYTAG "files are the same -> nothing to do"
+      else
+        cp -f $SHORTCUTS_FILE $SHORTCUTS_FILE.old
+        cp -f $REMOTE_SHORTCUTS_FILE $SHORTCUTS_FILE
+      fi
+    else
+      logger -p local1.notice -t $MYTAG "remote file does not exist"
+    fi
+
+  else
+    logger -p local1.notice -t $MYTAG "share is not mounted -> nothing to do"
+  fi
+  
+}

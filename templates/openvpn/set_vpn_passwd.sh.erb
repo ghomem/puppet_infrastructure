@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# Dialog strings
+BLANK_PASSWD="One of the passwords was blank.\nPlease make sure to type the passwords correctly."
+ASK_PASSWD="Please type your password for VPN connections."
+ASK_RETYPE_PASSWD="Please retype your password for confirmation."
+CANCEL_OPERATION="You canceled this operation."
+UNMATCHING_PASSWD="Passwords didn't match.\nPlease make sure to type the passwords correctly."
+CONF_FINISHED="Configuration finished."
+###############
+
+update_vpn_con_passwd() {
+
+    VPN_USER_PASSWD=$1
+    VPN_CON_FILE_LOCATION="/etc/NetworkManager/system-connections/"
+    VPN_LIST="<% @vpn_list.each do |vpn_name| %> <%= vpn_name %><% end %>"
+    
+    for vpn_name in $VPN_LIST; do
+        CONN_LOCATION="${VPN_CON_FILE_LOCATION}${vpn_name}"
+        if [ -f "$CONN_LOCATION" ];then
+            nmcli connection modify "${vpn_name}" vpn.secrets "password=${VPN_USER_PASSWD}"
+        fi
+    done
+
+}
+
+GUARD=true
+while $GUARD; do
+
+    PASSWORD=`kdialog --title "VPN Passwords" --password "$ASK_PASSWD"`
+
+    if [ $? -eq 1 ];then
+        kdialog --msgbox "$CANCEL_OPERATION"
+        exit
+    fi
+
+    PASSWORD_CONFIRM=`kdialog --title "VPN Passwords" --password "$ASK_RETYPE_PASSWD"`
+
+    if [ $? -eq 1 ];then
+        kdialog --msgbox "$CANCEL_OPERATION"
+        exit
+    fi
+
+    if [ -z $PASSWORD ] || [ -z $PASSWORD_CONFIRM ];then
+        kdialog --msgbox "$BLANK_PASSWD"
+    else {
+        if [ x$PASSWORD = x$PASSWORD_CONFIRM ];then
+            # execute logic
+            update_vpn_con_passwd $PASSWORD
+            GUARD=false
+        else {
+            kdialog --msgbox "$UNMATCHING_PASSWD"
+        }
+        fi
+    }
+    fi
+done
+
+kdialog --msgbox "$CONF_FINISHED"

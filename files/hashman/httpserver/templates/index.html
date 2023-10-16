@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ strtitle }}</title>
+    <link rel="shortcut icon" href="{{ url_for('static',filename='img/logo.png')  }}" />
+
+    <!-- Pico.css -->
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles/pico.min.css')  }}" />
+
+    <!-- Custom style -->
+    <link rel="stylesheet" href="{{ url_for('static',filename='styles/custom.css')  }}" />
+
+  </head>
+
+  <body>
+    <!-- Nav -->
+    <nav class="container-fluid">
+      <ul>
+        <li>
+		<a href="{{ companywebsite }}" class="contrast" onclick="event.preventDefault()"><strong>{{ companyname }}</strong></a>
+        </li>
+      </ul>
+    </nav>
+    <!-- ./ Nav -->
+
+    <!-- Main -->
+    <main class="scale-down" class="container" style="width: 500px" >
+      <article class="grid">
+        <div style="text-align: center;">
+          <hgroup>
+            <img src="{{ url_for('static',filename='img/logo.png')  }}" alt="Logo" style="width: 50px;"> <!-- Adjust the size as needed -->
+            <h1>Sign in</h1>
+            <h2>Log in to change your password</h2>
+          </hgroup>
+          <form action="login" method="post" enctype="multipart/form-data">
+            <input
+              id="username"
+              type="text"
+              name="username"
+              placeholder="type your username"
+              aria-label="Login"
+              autocomplete="off"
+              onkeyup="checkLoginFields( 'username', 'password', 'login' ); return false;"
+	      onchange="checkLoginFields( 'username', 'password', 'login' ); return false;"
+            />
+            <input
+	      id="password"
+              type="password"
+              name="password"
+              placeholder="type your password"
+              aria-label="Password"
+              autocomplete="off"
+	      onkeyup="checkLoginFields( 'username', 'password', 'login' ); return false;"
+	      onchange="checkLoginFields( 'username', 'password', 'login' ); return false;"
+            />
+            <button id='login'  name='login' type="submit" class="contrast" disabled>Login</button>
+          </form>
+	  <hr class="divider">
+	  <!-- Footer -->
+	  <footer class="container-fluid">
+            <small>
+              Need help?
+              <a
+                href="#"
+	        class="secondary"
+	        data-target="modal-example"
+	        onClick="event.preventDefault(); toggleModal(event)"
+		>
+		Click here
+	      </a>
+	    </small>
+	  </footer>
+	  <!-- ./ Footer -->
+        </div>
+      </article>
+    </main>
+    <!-- ./ Main -->
+
+    <!-- Include Modal -->
+    {% include 'modal.html' %}
+
+    <!-- Include JS Scripts -->
+    <script src="{{ url_for('static',filename='js/customvalidation.js')  }}" ></script>
+    <script src="{{ url_for('static',filename='js/pico/modal-handler.js')  }}" ></script>
+    <script> function resetForm( formId ) { document.getElementById(formId).reset(); } </script>
+    <script>
+      // Clear all input fields and textareas on page load
+      window.onload = function() {
+        const inputs = document.querySelectorAll("input, textarea");
+        inputs.forEach((input) => {
+          input.value = '';
+        });
+
+        const helpButton = document.getElementById('helpbutton');
+        helpButton.addEventListener('click', function(e) {
+          if (!checkHelpFields('name', 'email', 'msg', 'helpbutton')) {
+            e.preventDefault();
+          }
+        });
+        checkHelpFields( 'name', 'email', 'msg' , 'helpbutton');
+        checkLoginFields( 'username', 'password', 'login' );
+      };
+    </script>
+    <script>
+        document.getElementById('helpbutton').addEventListener('click', function() {
+          var form = document.getElementById('reqhelp');
+
+          //wait for 5 seconds
+	  setTimeout(function() {
+	    // Submit the form
+            form.submit();
+
+          }, 5000);
+          // Show the confirmation modal
+          document.getElementById('confirmation-modal').showModal();
+      });
+    </script>
+  </body>
+</html>

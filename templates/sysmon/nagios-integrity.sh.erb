@@ -1,0 +1,56 @@
+#!/bin/bash
+
+RC_OK=0
+RC_CRITICAL=2
+RC_UNKNOWN=3
+OUTLIM=160
+
+function handle_error
+{
+
+CODE=$1
+ACTION=$2
+INV=$3
+
+# INV means to invert the handling logic
+
+if [ -z $INV ]; then
+  if [ $CODE -ne 0 ]; then
+    echo "CRITICAL: $ACTION"
+    exit $RC_CRITICAL
+  fi
+else
+ if [ $CODE -eq 0 ]; then
+    echo "CRITICAL: $ACTION"
+    exit $RC_CRITICAL
+  fi
+fi
+
+  return $RC_OK
+}
+
+# dynamically generated list
+
+CHECKLIST="\
+<%= @checklist %>
+"
+
+# the list is separated by ':'
+IFS=":"
+
+# iterate over the list checking only the files that are present
+for ITEM in $CHECKLIST; do
+    FILE=`echo $ITEM | awk '{ print $2 }'`
+    #echo $FILE is on the list
+    if [ -f $FILE ]; then
+        echo $ITEM | md5sum -c --status -
+        RC=$?
+        #echo $FILE is present and return code from check was $RC
+        handle_error $RC "checksum error for $ITEM"
+    fi
+done
+
+# normal case, we are OK if we haven't exited before
+echo "OK: exit code $RC_OK"
+exit $RC_OK
+

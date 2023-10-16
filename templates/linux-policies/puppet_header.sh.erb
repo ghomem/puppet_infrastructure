@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# include the linux policies funtions
+. <%= @linux_policies_dir %>/COMMON/common
+
+# check if the user is logged in
+USERNAME=`whoami`
+SYSLOG_TAG='linuxint-policies'
+who | awk '{print $1}' | grep -q "^$USERNAME\$" && {
+  logger -p local1.notice -t $SYSLOG_TAG "User ${USERNAME} loged in, executing policies"
+} || {
+  logger -p local1.notice -t $SYSLOG_TAG "User ${USERNAME} not loged in, skipping policies execution"
+  exit 0
+}
+
+#Linux policies for this user:

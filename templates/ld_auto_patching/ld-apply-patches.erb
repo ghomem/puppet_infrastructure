@@ -1,0 +1,128 @@
+#!/usr/bin/python3
+
+import glob
+import os
+import sys
+import re
+import tempfile
+
+LOCAL_DIR = "<%= @localdir %>" 
+
+TARBALL_DIR = os.path.join(LOCAL_DIR, "ld_patches")
+PATCH_FILE_NAME_SUFFIX = ".tar.gz"
+PATCHES_APPLIED_FILE_PATH = os.path.join(TARBALL_DIR, "patches-applied.txt")
+
+def print_separator():
+    """Prints a separator"""
+    print('#'*80)
+
+def print_list(title, list_to_print):
+    """Prints our lists in a nice readable way"""
+    print("%s:" % title)
+    if not list_to_print:
+        print(" <none>")
+    else:
+        for element in list_to_print:
+            print(" %s" % element)
+
+def get_tarball_list(tarball_directory):
+    """Gets the tarball filename list found in tarball_directory"""
+    # Find out the list of available tarballs with patches
+    file_path_pattern = os.path.join(TARBALL_DIR, "*" + PATCH_FILE_NAME_SUFFIX)
+    tarball_path_list = glob.glob(file_path_pattern)
+    # Just return the tarball names rather than the full paths
+    tarball_list = []
+    for tarball_path in tarball_path_list:
+        tarball_name = os.path.basename(tarball_path)
+        tarball_list.append(tarball_name)
+    return tarball_list
+
+def get_patches_applied():
+    """Gets the list of patches already applied"""
+    # Open and read the lines of the file providing a list of the patches already applied
+    try:
+        patches_applied_file = open(PATCHES_APPLIED_FILE_PATH, 'r')
+    except FileNotFoundError:
+        return []
+    lines = patches_applied_file.readlines()
+    # Filter the lines we got a little bit and return the list
+    result = []
+    for line in lines:
+        line = line.strip()
+        if line:
+            result.append(line)
+    return result
+
+
+def get_patches_to_apply():
+    """Returns a list of tarballs with the patches to apply during the execution of this program"""
+    # Get and print the tarball list
+    tarball_list = get_tarball_list(TARBALL_DIR)
+    print_list("Tarball list", tarball_list)
+
+    # Get and print the applied patches list
+    patches_applied_list = get_patches_applied()
+    print_list("Patches already applied", patches_applied_list)
+
+    # For each tarball, check if the patch was already applied and return a list with the patches
+    # which were not applied yet
+    patches_list = []
+    for tarball_file_name in tarball_list:
+        if tarball_file_name not in patches_applied_list:
+            patches_list.append(tarball_file_name)
+
+    # Print list of patches to apply
+    print_list("List of patches to apply", patches_list)
+
+    # Return result
+    return patches_list
+
+
+def apply_patches(tarball_name_list):
+    """Applies the given set of patches"""
+    for tarball_name in tarball_name_list:
+        # Get the tarball full path
+        tarball_path = os.path.join(TARBALL_DIR, tarball_name)
+        # Create temporary directory, cd into it and take note of the previous cwd
+        temp_dir = tempfile.mkdtemp()
+        previous_cwd = os.getcwd()
+        os.chdir(temp_dir)
+        # Extract the tarball contents in a temporary directory
+        print("Extracting: %s" % tarball_path)
+        sys.stdout.flush()
+        os.system("tar xzf %s --strip=1" % tarball_path)
+        sys.stdout.flush()
+        # Execute the patch
+        install_patch_file_path = os.path.join(temp_dir, "install-patch.sh")
+        os.system(install_patch_file_path)
+        # Go back to the previous cwd
+        os.chdir(previous_cwd)
+        # Update the list of patches applied
+        patches_applied_file = open(PATCHES_APPLIED_FILE_PATH, 'a')
+        print(tarball_name, file=patches_applied_file)
+        patches_applied_file.close()
+        # Print separator
+        print_separator()
+
+
+def main():
+    """Main function"""
+
+    # Print separator
+    print_separator()
+
+    # Print the tarball directory
+    print("TARBALL_DIR: %s" % TARBALL_DIR)
+
+    # Get the list of patches to apply
+    patches_to_apply = get_patches_to_apply()
+
+    # Print separator
+    print_separator()
+
+    # Apply the patches
+    apply_patches(patches_to_apply)
+
+
+if __name__ == "__main__":
+    main()

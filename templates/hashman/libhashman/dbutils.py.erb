@@ -1,0 +1,867 @@
+import os
+import sys
+import time
+import shutil
+import logging
+import subprocess
+import crypt
+from libhashman.config import *
+from libhashman.miscutils import *
+from libhashman.typeutils import *
+from libhashman.coding import *
+
+
+# we use this to protect the db file against concurrent accesses and centralize dbchecks
+def lockdb(timeout=3):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    mytime = 0
+    while (mytime < timeout):
+        try:
+            if mytime != 0:
+                time.sleep(1)
+            mytime = mytime + 1
+            # mkdir is suposedely atomic and returns an error if dir exists
+            os.mkdir(LOCKDIR)
+            status = E_OK
+            break
+
+        except Exception as exception:
+            logging.debug(str(exception))
+            status = E_ERR
+
+    if status == E_ERR:
+        logging.error('could not acquire a lock')
+        sys.exit(E_ERR)
+
+    # we successfully locked
+
+    # now suspend signal handing to ensure to prevent interruption of this sequence
+    signals_handle(False)
+
+    # we can now examine the database exclusively
+    if not checkdb():
+        logging.debug('database file is missing, inconsistent or has wrong permissions')
+        os.rmdir(LOCKDIR)
+        sys.exit(E_ERR)
+
+    # if the database is good create a backup copy
+    # it is critical to ensure this because on signal receival we restore from here
+    try:
+        shutil.copytree(DBDIR, DBDIRBACK)
+
+    except Exception as exception:
+        logging.debug(str(exception))
+        logging.error('error during database backup, aborting...')
+        logging.error( LOCKDIR + ' not deleted ')
+        sys.exit(E_ERR)
+
+    # we are OK let's resume signal handling
+    signals_handle(True)
+
+    return E_OK
+
+
+# release the lock, retore the db if needed
+def unlockdb(restore=False):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    if not os.path.isdir(DBDIRBACK):
+        logging.error('Will not delete main db because %s does not exist' % (DBDIRBACK))
+        logging.info('Removing db lock')
+        os.rmdir(LOCKDIR)
+        return E_ERR
+
+    try:
+        if ( restore ):
+            shutil.rmtree(DBDIR)
+            shutil.copytree( DBDIRBACK, DBDIR )
+
+        shutil.rmtree(DBDIRBACK)
+        os.rmdir(LOCKDIR)
+        return E_OK
+
+    except Exception as exception:
+        logging.debug(str(exception))
+        return E_ERR
+
+
+# signal exit handler function
+def signal_exit(signum, frame):
+    logging.info('exiting on signal ' + str(signum))
+    # rolls back changes
+    unlockdb(True)
+    sys.exit(E_ERR)
+
+
+# function to handle termination signals calling the signal_exit function
+# above if needed, resulting in rolling back the database changes and removing
+# lock files
+def signals_handle(flag):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    if flag is True:
+        handler = signal_exit
+    else:
+        handler = signal.SIG_IGN
+
+    signal.signal(signal.SIGTERM, handler)
+    signal.signal(signal.SIGINT, handler)
+    signal.signal(signal.SIGALRM, handler)
+    signal.signal(signal.SIGTSTP, handler)
+
+
+# initializes the db files in case one or more is missing
+def initdb():
+    logging.debug( sys._getframe().f_code.co_name )
+
+    for myfile, suffix in DBINFO.items():
+        try:
+            # tries to open for writing, creates if it doesn't exist
+            # CAREFUL: must be 'a', not 'w'
+            open(myfile, 'a')
+        except Exception as exception:
+            logging.debug(str(exception))
+            return E_ERR
+
+    return E_OK
+
+
+# checks the set of database files
+def checkdb():
+    logging.debug( sys._getframe().f_code.co_name )
+
+    for file, suffix in DBINFO.items():
+        status = checkdb_file(file, suffix)
+        if status is not True:
+            return False
+
+    return True
+
+
+# checks wether the database file has the appropriate format
+def checkdb_file( dbfile, suffix ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    try:
+        input_fp = None
+        input_fp = open(dbfile, "r")
+        for line in iter( input_fp.readline, '' ):
+            # we iterate along all the file ignoring lines starting with
+            if ( line.startswith("#") is False ):
+                parts = line.split(SEPARATOR)
+                auxp = parts[0].split('$')
+                dbpass = parts[1].strip()[1:-1]
+                dbusername = strip_suffix( auxp[1].strip(), suffix )
+
+    except Exception as exception:
+        logging.debug(str(exception))
+        if (input_fp is not None):
+            input_fp.close()
+        return False
+
+    input_fp.close()
+    return True
+
+
+# checks username + password combination against the existing database file
+def auth(username, password):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # hold on your horses
+    mkdelay( AUTHDELAY_BASE , AUTHDELAY_DELTA )
+
+    # first thing is input validation
+    if checkstr_usr(username) is False:
+        return E_ERR
+
+    if checkstr_pwd(password) is False:
+        return E_ERR
+
+    try:
+        pwentry = getpw(username)
+        if ( pwentry is None ):
+            logging.debug('user ' + username + ' not found')
+            return E_ERR
+
+        parts    = pwentry.strip().split('$')
+        salttype = parts[1]
+        saltstr  = parts[2]
+        dbpw     = parts[3]
+
+        # support case where password is expired
+        if ( salttype.startswith( EXPIREPREFIX ) ):
+            logging.debug('password is expired but we accept auth')
+            salttype = salttype[1:]
+            pwentry = parts[0] + '$' + salttype + '$' + saltstr + '$' + dbpw
+
+        # the result is the same with and without the last $
+        ourentry = crypt.crypt( password , '$' + salttype + '$' + saltstr + '$')
+
+        if ( ourentry == pwentry ):
+            return E_OK
+        else:
+            return E_ERR
+
+    except Exception as exception:
+        logging.debug( str(e) )
+        return E_ERR
+
+    # don't grant anything by default
+    return E_ERR
+
+
+# trigger post database change actions
+def ondbchange(cmd, username, password, loghandle , logprefix, extramsg=''):
+    from libhashman.interface import listplugins
+    # we dont want the user to be able to interrupt this crucial operation
+    signals_handle( False )
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # handle different types of plugins
+    plugin_msg = 'db changed for ' + cmd + ' on ' + username
+    if (extramsg):
+        plugin_msg = plugin_msg + ' reason: ' + extramsg
+
+    DEVNULL = open(os.devnull, 'wb')
+
+    # type 1 - no parameters
+
+    type = 1
+    plist = listplugins(type)
+    for plugin in plist:
+        loghandle.info( OURPROCTITLE + logprefix + ': executing type ' + str(type) + ' plugin ' + plugin )
+        subprocess.Popen([ 'nohup', plugin ], stdout=DEVNULL , stderr=DEVNULL )
+
+    # type 2 - only plugin_msg
+
+    type = 2
+    plist = listplugins(type)
+    for plugin in plist:
+        loghandle.info( OURPROCTITLE + logprefix + ': executing type ' + str(type) + ' plugin ' + plugin )
+        subprocess.Popen([ 'nohup', plugin , plugin_msg ], stdout=DEVNULL , stderr=DEVNULL )
+
+    # type 3 - user info + plugin_msg
+
+    # we don't implement the expire/unexpire thing for now as it is only currently for the initial user state
+    # useradd will set the password + issue the lock cmd
+    # the unlock command will unlock the user
+    # expire / unexpire commands are ignored
+    # in general, commands which change variables that are not stored remotely are ignored
+
+    if ( cmd not in SYNCCMDS ):
+        # resuming signal handeling before exiting function
+        signals_handle( True )
+        return
+
+    type = 3
+    plist = listplugins(type)
+
+    if ( extramsg != '' ):
+        argmsg = [ '-m', extramsg ]
+    else:
+        argmsg = []
+
+    if ( cmd != 'userdel' ):
+        argcname = getcname(username)
+    else:
+        argcname = 'dummy'
+
+    args = 'dummy'
+    for plugin in plist:
+        loghandle.info( OURPROCTITLE + logprefix + ': executing type ' + str(type) + ' plugin ' + plugin )
+
+        # set the user password
+        if ( cmd == 'setpw' or cmd == 'setpwint' or cmd == 'reset' or cmd == 'inform' ):
+            args = [ '-p', password ] + argmsg + [ username, 'present', argcname ]
+
+        # delete the user
+        if ( cmd == 'userdel' ):
+            args = argmsg + [ username, 'absent', argcname ]
+
+        if ( cmd == 'lock' ):
+            args = argmsg + [ username, 'locked', argcname ]
+
+        # make authentication possible again without changing the existing password
+        if ( cmd == 'unlock' ):
+            args = argmsg + [ username, 'present', argcname ]
+
+        if ( cmd == 'useradd' ):
+            args = [ '-p' , password ] + argmsg + [ username, 'present', argcname ]
+
+        # generic execution for all cases
+        execline = [ plugin ] + args
+        # this is a blocking call
+        myproc = subprocess.call( execline , stdout=DEVNULL , stderr=DEVNULL )
+
+        # for useradd we still need to lock the user afterwards
+        if ( cmd == 'useradd' ):
+            args = argmsg + [ username, 'locked', argcname ]
+            execline = [ plugin ] + args
+            # this is a blocking call
+            subprocess.call( execline , stdout=DEVNULL , stderr=DEVNULL )
+
+    # resuming signal handeling before exiting function
+    signals_handle( True )
+
+
+# looks up the existing password entry of a given user
+def getpw(username, returnline=False):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    return getent(username, DBFILE_USER, SUFFIX_USER, returnline)
+
+
+# looks up the existing samba hash entry of a given user
+def getsmbhash(username, returnline=False):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    return getent(username, DBFILE_SMB, SUFFIX_SMB, returnline)
+
+
+# looks up the existing email entry of a given user
+def getemail(username, returnline=False):
+    logging.debug(sys._getframe().f_code.co_name )
+
+    return getent(username, DBFILE_EMAIL, SUFFIX_EMAIL, returnline)
+
+
+# looks up the existing cname entry of a given user
+def getcname(username, returnline=False):
+    logging.debug( sys._getframe().f_code.co_name)
+
+    return getent(username, DBFILE_CNAME, SUFFIX_CNAME, returnline)
+
+
+# looks up the existing company entry of a given user
+def getcompany(username, returnline=False):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    return getent(username, DBFILE_COMPANY, SUFFIX_COMPANY, returnline)
+
+
+# looks up the existing passphrase signatures entries of a given user
+def getppsigs(username, returnline=False):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    return getent(username, DBFILE_PPSIGS, SUFFIX_PPSIGS, returnline)
+
+
+# looks up the existing wrapped ecryptfs passphrase of a given user
+def getppwrapped(username, returnline=False):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    return getent(username, DBFILE_PPWRAPPED, SUFFIX_PPWRAPPED, returnline)
+
+
+# looks up the existing passphrase signatures entries of a given user
+def getpubkey(username, returnline=False):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    return getent(username, DBFILE_KEY, SUFFIX_KEY, returnline)
+
+
+# looks up a generic entry of a given user
+def getent(username, dbfile, suffix, returnline=False):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    try:
+        index = -1
+        input_fp = None
+        input_fp = open(dbfile, "r")
+        for line in iter(input_fp.readline, ''):
+            index = index + 1
+            if ( not line.startswith("#") ):
+                # second argument is the count, SEPARATOR signs might occur inside the string!
+                parts = line.split(SEPARATOR, 1)
+                # we need to skip the ruby assignement $
+                auxp = parts[0].split('$')
+                # trim an dequote password
+                dbvalue = parts[1].strip()[1:-1]
+                # trim left hand before stripping suffix
+                dbusername = strip_suffix(auxp[1].strip(), suffix)
+                if ( dbusername == username):
+                    if ( returnline is True):
+                        return index
+                    else:
+                        # string-escape was added for surviving the export/userdel/import round trip
+                        # that was failing for not fully understood reasons - see #50
+                        return db_str_decode(dbvalue)
+
+    except Exception as exception:
+        logging.debug(str(exception))
+        if (input_fp is not None):
+            input_fp.close()
+        return None
+
+    input_fp.close()
+    return None
+
+
+# sets the ecryptfs base64 encoded parameters of a given user
+def setecryptfs(username, ppsigs, ppwrapped):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # first thing is input validation
+    if ( checkstr_usr( username ) is False ):
+        return E_ERR
+
+    if ( checkstr_b64( ppsigs ) is False ):
+        return E_ERR
+
+    if ( checkstr_b64( ppwrapped ) is False ):
+        return E_ERR
+
+    idx1 = getppsigs(username, True )
+    idx2 = getppwrapped(username, True )
+    if ( idx1 is not None and idx2 is not None ):
+        rc1 = setent( username, idx1, ppsigs, DBFILE_PPSIGS )
+        rc2 = setent( username, idx2, ppwrapped, DBFILE_PPWRAPPED )
+        if (rc1 == E_OK and rc2 == E_OK):
+            return E_OK
+        else:
+            return E_ERR  # one or more setents failed
+    else:
+        return E_ERR  # one or more of the indexes were not found
+
+    return E_ERR
+
+
+# sets the public key of a given user
+def setpubkey( username, pubkey ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # first thing is input validation
+    if ( checkstr_usr( username ) is False ):
+        return E_ERR
+
+    if ( checkstr_b64( pubkey ) is False ):
+        return E_ERR
+
+    index = getpubkey(username, True )
+    if ( index is not None ):
+        return setent( username, index, pubkey , DBFILE_KEY )
+
+    return E_ERR
+
+
+# resets the public key of a given user to an empty string
+def unsetpubkey( username ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    index = getpubkey(username, True)
+    if ( index is not None ):
+        return setent( username, index, '' , DBFILE_KEY )
+
+    return E_ERR
+
+
+# resets the ecryptfs related paramters to empty strings
+def unsetecryptfs( username ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # first thing is input validation
+    if ( checkstr_usr( username ) is False ):
+        return E_ERR
+
+    idx1 = getppsigs(username, True )
+    idx2 = getppwrapped(username, True )
+    if ( idx1 is not None and idx2 is not None ):
+        rc1 = setent( username, idx1, '', DBFILE_PPSIGS )
+        rc2 = setent( username, idx2, '', DBFILE_PPWRAPPED )
+        if (rc1 == E_OK and rc2 == E_OK):
+            return E_OK
+        else:
+            return E_ERR  # one or more setents failed
+    else:
+        return E_ERR  # one or more of the indexes were not found
+
+    return E_ERR
+
+
+# sets the email of a given user
+def setemail( username, email ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # first thing is input validation
+    if ( checkstr_usr( username ) is False ):
+        return E_ERR
+
+    if ( not is_email( email ) ):
+        return E_ERR
+
+    index = getemail(username, True )
+    if ( index is not None ):
+        return setent( username, index, email , DBFILE_EMAIL )
+
+    return E_ERR
+
+
+# sets the company key of a given user
+def setcompany( username, company ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # first thing is input validation
+    if ( checkstr_usr( username ) is False ):
+        return E_ERR
+
+    if ( checkstr( company, WHITELIST_COMPANY ) is False ):
+        return E_ERR
+
+    index = getcompany(username, True )
+    if ( index is not None ):
+        return setent( username, index, company , DBFILE_COMPANY )
+
+    return E_ERR
+
+
+# sets the common name of a given user
+def setcname( username, cname ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # first thing is input validation
+    if ( checkstr_usr( username ) is False ):
+        return E_ERR
+
+    if ( not is_cname(cname) ):
+        return E_ERR
+
+    index = getcname(username, True )
+    if ( index is not None ):
+        return setent( username, index, cname , DBFILE_CNAME )
+
+    return E_ERR
+
+
+# helper to unwrapp the ecryptfs passphrase
+def getpp( ppwrapped, password ):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    ppwrapped_bin = base64.b64decode(ppwrapped)
+    myfile  = '/tmp/tmpecrypt-' + mkstr(8)
+    output_fp = open(myfile, 'wb')
+    output_fp.write(ppwrapped_bin)
+    output_fp.close()
+
+    # get the passphrase to rewrap and resign
+    ps = subprocess.Popen(('/bin/echo', password), stdout=subprocess.PIPE)
+    output = subprocess.check_output( ( UNWRAPCMD, myfile ), stdin=ps.stdout)
+    ps.wait()
+    output = output.decode()
+    passphrase = output.split('\n')[1]
+
+    return passphrase, myfile
+
+
+# sets the password entry of a given user
+def setpw(username, password, raw=False, oldpassword='', smbhash=''):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # first thing is input validation
+    if ( checkstr_usr( username ) is False ):
+        logging.error('Invalid user name')
+        return E_ERR
+
+    if ( not raw and checkstr_pwd( password ) is False ):
+        logging.error('Invalid new password, probably it contains forbidden characters')
+        return E_ERR
+
+    # if the old password is given we check wether is is correct
+    # to protect the ecryptfs stuff
+    if ( oldpassword != '' ):
+        if ( checkstr_pwd( password ) is False ):
+            logging.error('Incorrect old password')
+            return E_ERR
+        if ( auth( username , oldpassword ) == E_ERR):
+            logging.error('Incorrect old password')
+            return E_ERR
+
+    # then we check password complexity
+    if ( not raw and checkpw( password ) is False ):
+        logging.error('New password is too simple')
+        return E_ERR
+
+    if ( raw ):
+        ourentry = password
+    else:
+        saltstr  = mksalt()
+        # the result is the same with and without the last $
+        ourentry = crypt.crypt( password , '$' + SALTTYPE + '$' + saltstr + '$')
+
+    index = getpw(username, True)
+    smbindex = getsmbhash(username, True)
+
+    rc = E_OK
+    # to preserve spacing we modify the line directly instead of rewriting it
+    if ( index is not None and index > -1 ):
+        rc = setent(username, index, ourentry, DBFILE_USER)
+        if ( rc != E_OK ):
+            return rc
+
+        # code that handles smbhash management
+        # if we are doing a raw entry setting (locks, expire, unlock, expire)
+        if (raw):
+            # if smbhash is passed as None then the user does not have an smbhash entry
+            if ( smbhash is None ):
+                pass
+            elif ( smbindex is not None and smbindex > -1 ):
+                # set the smbhash if the user already has an entry
+                rc = setent(username, smbindex, smbhash, DBFILE_SMB)
+            else:
+                # create a user with both Unix and Samba hash as raw values
+                rc = addent(username, samba_hash, DBFILE_SMB, SUFFIX_SMB)
+        else:
+            # not raw, normal password setting
+            if smbhash is None or smbhash == '':
+                newsmbhash = generatesmbhash(password)
+                if ( smbindex is not None and smbindex > -1 ):  # if we already have a samba hash we replace it
+                    rc = setent(username, smbindex, newsmbhash, DBFILE_SMB)
+                else:  # otherwise we add it
+                    rc = addent(username, newsmbhash, DBFILE_SMB, SUFFIX_SMB)
+            else:
+                logging.error('Error: we should not receive a samba hash on a normal pasword setting operation')
+                return E_ERR
+
+        if ( rc != E_OK ):
+            return rc
+    else:
+        return E_ERR  # user does not exist
+
+    # if we are called with the actual password we need to also update the ecrypt entries
+    if ( not raw ):
+        ppsigs = getppsigs(username)
+        ppwrapped = getppwrapped(username)
+
+        if ( ppsigs != '' and ppwrapped != ''):
+            if ( oldpassword == ''):
+                logging.error('we have ecryptfs info but did not get the old password')
+                return E_ERR
+            else:
+                try:
+                    logging.info('updating ecryptfs data for user ' + username )
+
+                    passphrase, myfile = getpp(ppwrapped, oldpassword)
+
+                    # get the new wrapped passphrase
+                    myfile  = '/tmp/tmpecrypt-' + mkstr(8)
+                    ps = subprocess.Popen(('/bin/echo', passphrase + '\n' + password), stdout=subprocess.PIPE)
+                    output = subprocess.check_output( ( WRAPCMD , myfile), stdin=ps.stdout)
+                    ps.wait()
+                    input_fp = open(myfile, 'rb')
+                    ppwrapped_new_bin = input_fp.read()
+                    ppwrapped_new = base64.b64encode(ppwrapped_new_bin).decode()
+                    input_fp.close()
+
+                    # we delete the temporary file as soon as we don't need it
+                    os.remove(myfile)
+
+                    # and if all went well let us write the entries
+                    # ppsigs is the same because it does NOT change on password changes
+                    return setecryptfs(username, ppsigs, ppwrapped_new)
+
+                except Exception as exception:
+                    logging.debug(str(exception))
+                    logging.info('there was an error on the ecryptfs parameters processing')
+                    return E_ERR
+
+        else:  # ppsigs and ppwrapped are empty
+            return E_OK
+    else:  # if raw
+        return E_OK
+
+    return E_ERR
+
+
+# sets up a generic entry of a given existing user
+def setent(username, index, content, dbfile):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    try:
+        # this is on top because closing might be done on the exception handler
+        input_fp = None
+        input_fp = open(dbfile, "r")
+        # reset the pointer so we can read all the lines
+        input_fp.seek(0)
+        alllines = input_fp.readlines()
+        tmpline = alllines[index]
+        # reuse whatever is before the content
+        tmpline = tmpline.partition('\'')[0]
+        # rewrite content
+        tmpline = tmpline + '\'' + db_str_encode(content) + '\'' + '\n'
+        alllines[index] = tmpline
+        input_fp.close()
+
+        output_fp = None
+        signals_handle(False)
+        # suspend signal handling around file writing
+        output_fp = open(dbfile, "w")
+        output_fp.writelines(alllines)
+        output_fp.close()
+        # resume signal handling
+        signals_handle(True)
+
+        return E_OK
+
+    except Exception as exception:
+        logging.debug(str(exception))
+
+        if (input_fp is not None):
+            input_fp.close()
+        if (output_fp is not None):
+            output_fp.close()
+
+        signals_handle(True)
+
+        return E_ERR
+
+
+# adds an entry for a non existing user
+def addent(username, content, dbfile, suffix):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    try:
+        output_fp = None
+        signals_handle(False)
+        # suspend signal handling around file writing
+        output_fp = open(dbfile , "a")
+        # string-escape was added for surviving the export/userdel/import round trip
+        # that was failing for not fully understood reasons - see #50
+        ourline = '$' + username + suffix + ' = ' + '\'' + db_str_encode(content) + '\'' + '\n'
+        output_fp.writelines(ourline)
+        output_fp.close()
+        # resume signal handling
+        signals_handle(True)
+
+        return E_OK
+
+    except Exception as exception:
+        logging.debug(str(exception))
+        if (output_fp is not None):
+            output_fp.close()
+        signals_handle(True)
+        return E_ERR
+
+    return E_ERR
+
+
+# deletes the entry of an exiting user
+def delent(username, dbfile, suffix):
+
+    try:
+        input_fp = None
+        input_fp = open( dbfile , "r" )
+        alllines = input_fp.readlines()
+        input_fp.close()
+        output_fp = None
+        mykey = '$' + username + suffix
+        output_fp = open( dbfile , "w" )
+        for index in range(0, len(alllines) ):
+            curline = alllines[index]
+            leftside = curline.split('=')[0].strip()
+            if ( leftside != mykey ):
+                output_fp.writelines(alllines[index])
+        output_fp.close()
+        # resume signal handling
+
+        return E_OK
+
+    except Exception as exception:
+        logging.debug(str(exception))
+        if (output_fp is not None):
+            output_fp.close()
+        if (input_fp is not None):
+            input_fp.close()
+        signals_handle( True )
+
+        return E_ERR
+
+
+# locks a username by setting the password shadow field accordingly
+def lockpw(username, ignorestatus=False):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    # first thing is input validation
+    if checkstr_usr(username) is False:
+        return E_ERR
+
+    pwentry = getpw(username)
+    if pwentry is None:
+        logging.debug('user ' + username + ' not found')
+        return E_ERR
+
+    smbhashentry = getsmbhash(username)
+    if smbhashentry is None:
+        logging.debug('user ' + username + ' Samba hash not found, no action taken')
+
+    # if user is already locked we return an error except if ignorestatus = True
+    if is_pwlocked(pwentry):
+        logging.debug('user ' + username + ' already locked')
+        if ignorestatus is False:
+            return E_ERR
+        else:
+            return E_OK
+
+    pwentry = LOCKPREFIX + pwentry
+    smbhashentry = mk_smb_lockness(username, pwentry)
+
+    return setpw(username, pwentry, True, '', smbhashentry)
+
+
+# unlocks a username by removing the lock attribute on the password shadow field
+def unlockpw(username):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    # first thing is input validation
+    if checkstr_usr(username) is False:
+        return E_ERR
+
+    pwentry = getpw(username)
+    smbhashentry = getsmbhash(username)
+
+    if pwentry is None:
+        logging.debug('user ' + username + ' not found')
+        return E_ERR
+
+    if not is_pwlocked(pwentry):
+        logging.debug('user ' + username + ' not locked')
+        return E_ERR
+
+    pwentry = pwentry.lstrip(LOCKPREFIX)
+    smbhashentry = mk_smb_lockness(username, pwentry)
+
+    return setpw(username, pwentry, True, '', smbhashentry)
+
+
+# checks if a password entry is locked
+def is_pwlocked(pwentry):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    return pwentry.startswith(LOCKPREFIX)
+
+
+# checks if a Samba hash entry is locked
+def is_smbhashlocked(smbhash):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    return smbhash.startswith(LOCKPREFIX)
+
+
+# checks is a user is locked
+def is_locked(username):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    # first  thing is input validation
+    if checkstr_usr(username) is False:
+        return E_ERR
+
+    try:
+        pwentry = getpw(username)
+        if pwentry is None:
+            logging.debug('user ' + username + ' not found')
+            return E_ERR
+
+    except Exception as exception:
+        logging.debug(str(exception))
+        return E_ERR
+
+    return is_pwlocked(pwentry)

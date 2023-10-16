@@ -1,0 +1,13 @@
+{
+  "name": "puppet_infrastructure",
+  "version": "1.0.0",
+  "author": "Solid Angle",
+  "summary": "Common baseline Puppet Classes for infrastructure configuration and management",
+  "license": "GPLv3",
+  "source": "https://bitbucket.org/asolidodev/puppet_infrastructure/",
+  "project_page": "https://bitbucket.org/asolidodev/puppet_infrastructure/",
+  "issues_url": "",
+  "dependencies": [
+    { "name": "puppetlabs/stdlib", "version_requirement": ">= 4.25.1" }
+  ]
+}

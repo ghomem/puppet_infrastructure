@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# accepts multiple directories, no whitespace on any dirnames
+FILETARGETDIRS=<%= @basedir %>
+FILEPREFIX=<%= @prefix %>
+BACKDIR=<%= @backdir %>
+NC=<%= @ndays %>
+INTERVAL=1
+# no slashes in the end of dirs to be excluded or exclusion won't work! (tested on old tar 1.18)
+EXCLUDEDIRS=
+# if we ran as root and need to chown
+TARGETUSER=
+
+# toggle compression
+COMPRESSION=<%= @compression %>
+COMPRESSION_FLAG="z"
+
+if [ "x${COMPRESSION}" = "xfalse" ]; then
+    COMPRESSION_FLAG=""
+fi
+
+# interval, copies and days for the find command
+let DAYS=$INTERVAL*$NC-1
+
+# archive and compress files
+
+for d in $EXCLUDEDIRS; do
+        EXCLUDELINE="$EXCLUDELINE --exclude=$d"
+done
+
+tar $EXCLUDELINE -cv${COMPRESSION_FLAG}f $BACKDIR/$FILEPREFIX-`date +%Y-%b-%d-%Hh%Mm`.tar.gz $FILETARGETDIRS
+
+# we do this in the end because compressing takes time and $DAYS is counted from the end of compression
+
+for i in `find $BACKDIR -maxdepth 1 -mtime +$DAYS -type f -name "$FILEPREFIX*" `; do
+       rm -f  $i
+done
+
+# adjust ownership if necessary 
+
+if [ ! -z $TARGETUSER ]; then
+        chown -R $TARGETUSER $BACKDIR
+fi

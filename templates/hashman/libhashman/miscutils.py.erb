@@ -1,0 +1,158 @@
+import sys
+import os
+import random
+import signal
+import time
+import hashlib
+import base64
+import binascii
+import logging
+from random import randint
+from libhashman.config import *
+from libhashman.typeutils import *
+
+
+# helper to remove a suffix
+def strip_suffix(text, suffix):
+    if not text.endswith(suffix):
+        return text
+    return text[:len(text) - len(suffix)]
+
+
+# random string - suitable filenames, etc
+def mkstr(length, charset=WHITELIST_TMP):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    return ''.join(random.choice(charset) for i in range(length))
+
+
+# random string suitable for passwords (complexity is enforced)
+def mkpasswd(length):
+    logging.debug( sys._getframe().f_code.co_name )
+
+    # ensure NUMBERS, SYMBOLS, and UPPERCASE are present...
+    str  = mkstr(length - 3, LOWERCASE) + mkstr(1, UPPERCASE) + mkstr(1, NUMBERS) + mkstr(1, SYMBOLS)
+
+    # ... but not on a predictable place
+    mypass = ''.join(random.sample(str, len(str)))
+
+    return mypass
+
+
+# from man crypt (lower part for SHA-512):
+# "salt stands for the up to 16 characters"
+def mksalt():
+    logging.debug(sys._getframe().f_code.co_name)
+
+    uplim = len(SALTLIST) - 1
+    saltstr = ''
+    for x in range(0, SALTSIZE):
+        saltstr = saltstr + SALTLIST[randint(0, uplim)]
+
+    return saltstr
+
+
+# random delay to avoid brute force attacks
+def mkdelay(base, maxdelta):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    ourdelay = base + randint(0, maxdelta)
+    time.sleep(ourdelay)
+
+
+def enumusers():
+    logging.debug(sys._getframe().f_code.co_name)
+
+    try:
+        mylist = []
+        index = -1
+        input_fp = None
+        input_fp = open(DBFILE_USER, "r")
+        for line in iter(input_fp.readline, ''):
+            index = index + 1
+            if (not line.startswith("#")):
+                # second argument is the count, SEPARATOR signs might occur inside the string!
+                parts = line.split(SEPARATOR, 1)
+                # we need to skip the ruby assignement $
+                auxp = parts[0].split('$')
+                # trim left hand before stripping suffix
+                dbusername = strip_suffix(auxp[1].strip(), SUFFIX_USER)
+                mylist.append(dbusername)
+
+    except Exception as exception:
+        logging.debug(str(exception))
+        if (input_fp is not None):
+            input_fp.close()
+        return None
+
+    input_fp.close()
+    return mylist
+
+
+def generatesmbhash(password):
+    samba_nt_password = hashlib.new('md4', password.encode('utf-16le')).hexdigest()
+    # base64 value must be wrapped as a string otherwise an error will occur when calling encode('string-escape')
+    return str(base64.b64encode(binascii.a2b_hex(samba_nt_password)).decode("utf-8"))
+
+
+# checks if a password entry is expired
+def is_pwexpired(pwentry):
+    logging.debug(sys._getframe().f_code.co_name)
+
+    position = pwentry.index('$')
+    return pwentry[position + 1:].startswith(EXPIREPREFIX)
+
+
+# checks is a user is expired
+def is_expired(username):
+    from libhashman.dbutils import getpw
+    logging.debug(sys._getframe().f_code.co_name)
+
+    # first  thing is input validation
+    if checkstr_usr(username) is False:
+        return E_ERR
+
+    try:
+        pwentry = getpw(username)
+        if ( pwentry is None ):
+            logging.debug('user ' + username + ' not found')
+            return E_ERR
+
+    except Exception as exception:
+        logging.debug(str(exception))
+        return E_ERR
+
+    return is_pwexpired(pwentry)
+
+
+# set the Samba hash "lockness"
+def mk_smb_lockness(username, unix_password):
+    from libhashman.dbutils import getsmbhash, is_smbhashlocked, is_pwlocked
+    currentsmbhash = getsmbhash(username)
+
+    # if the Samba hash has not yet been created for this user, return None
+    if currentsmbhash is None:
+        return None
+
+    if is_pwexpired(unix_password) or is_pwlocked(unix_password):
+        # Samba hash must remain invalid if the user is either expired or locked
+        if is_smbhashlocked(currentsmbhash):
+            return currentsmbhash
+        else:
+            return LOCKPREFIX + currentsmbhash
+    else:
+        # Samba hash must be valid if the user is neither expired nor locked
+        if is_smbhashlocked(currentsmbhash):
+            return currentsmbhash.lstrip(LOCKPREFIX)
+        else:
+            return currentsmbhash
+
+
+def check_hashman_web(command):
+    if not os.path.exists(EMAIL_TEMPLATE):
+        if command in ['inform', 'reset', 'testemail']:
+            print("This command requires class puppet_infrastructure::hashman_web, which was not included in the node declaration.")
+            sys.exit(1)
+        elif command in ['useradd', 'test']:
+            print("Class puppet_infrastructure::hashman_web not included. Please run the command with [silent] option")
+            sys.exit(1)

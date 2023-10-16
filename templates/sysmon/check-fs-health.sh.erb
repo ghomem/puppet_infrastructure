@@ -1,0 +1,98 @@
+#!/bin/bash
+
+# * checking that backup file trees are not empty
+# * transversing the file trees and evaluating the return code
+# * calculating the checksum of N randomly selected files on each tree and evaluating the return code
+# ( this guarantees that the full content of those files is read )
+
+BASEDIR="<%= @basedir %>"               # storage directory
+SIZE_THRESHOLD="<%= @size_threshold %>" # in KB, 4KB is an empty directory
+NFILES="<%= @nfiles %>"                 # nr of files to check
+
+# nagios return codes
+RC_OK=0
+RC_CRITICAL=2
+RC_UNKNOWN=3
+OUTLIM=160
+
+function handle_error
+{
+
+CODE=$1
+ACTION=$2
+INV=$3
+
+# INV means to invert the handling logic
+
+if [ -z $INV ]; then
+  if [ $CODE -ne 0 ]; then
+    echo "CRITICAL: $ACTION"
+    exit $RC_CRITICAL
+  fi
+else
+ if [ $CODE -eq 0 ]; then
+    echo "CRITICAL: $ACTION"
+    exit $RC_CRITICAL
+  fi
+fi
+
+  return $RC_OK
+}
+
+function check_size
+{
+
+  MYSIZE=`du -sk $BASEDIR | awk '{ print $1 }'`
+  if [ $MYSIZE -gt $SIZE_THRESHOLD ]; then
+    return $RC_OK
+  else
+    return $RC_CRITICAL
+  fi
+
+}
+
+function check_files
+{
+
+  find $BASEDIR > /dev/null
+  RC=$?
+  return $RC
+
+}
+
+function check_files_content
+{
+
+  OIFS="$IFS"
+  IFS=$'\n'
+  MYLIST=`find $BASEDIR -type f | shuf |head -n $NFILES`
+  for f in $MYLIST; do
+    #echo "checking md5sum for $f"
+    md5sum "$f" > /dev/null
+    RC=$?
+    handle_error $RC "error checking md5sum for $f"
+  done
+  IFS="$OIFS"
+  return $RC_OK
+
+}
+
+check_size
+RC=$?
+
+handle_error $RC "storage space is empty"
+
+check_files
+RC=$?
+
+handle_error $RC "error listing files on the storage space"
+
+check_files_content
+RC=$?
+
+handle_error $RC "error acessing files content"
+
+# normal case
+echo "OK: exit code $RC $OUTPUT"
+exit $RC_OK
+

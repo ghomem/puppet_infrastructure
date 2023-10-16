@@ -1,0 +1,11 @@
+import codecs
+
+
+# this function must be used BEFORE writing non-ascii strings to the files given DBFILE_*
+def db_str_encode(string_decoded):
+    return codecs.encode(string_decoded, 'unicode_escape').decode()
+
+
+# this function must be used AFTER reading non-ascii strings to the files given DBFILE_*
+def db_str_decode(string_encoded):
+    return codecs.decode(bytes(string_encoded, 'utf-8'), 'unicode_escape')

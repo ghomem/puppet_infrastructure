@@ -1,0 +1,54 @@
+# See /usr/share/postfix/main.cf.dist for a commented, more complete version
+
+# Debian specific:  Specifying a file name will cause the first
+# line of that file to be used as the name.  The Debian default
+# is /etc/mailname.
+#myorigin = /etc/mailname
+
+smtpd_banner = $myhostname ESMTP $mail_name (Ubuntu)
+biff = no
+
+myhostname = <%= @hostname %>
+myorigin = <%= @myorigin %>
+mydomain = $myorigin
+# affects emails the use only the short hostname - see note below
+append_dot_mydomain = yes
+
+# NOTE: the cli mail command always inserts the hostname on the from
+# override with:
+# 
+# echo "on two" |mail -aFrom:someone@domain.pt -s jenkins  someone_else@domain.pt
+
+readme_directory = no
+
+# TLS parameters
+smtpd_tls_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
+smtpd_tls_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
+smtpd_use_tls=yes
+smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
+smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
+
+smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+mydestination = <%= @mydestination %>, localhost.localdomain, , localhost
+mynetworks = <%= @mynetworks %>
+mailbox_size_limit = 0
+message_size_limit = <%= @message_size_limit %>
+recipient_delimiter = +
+inet_interfaces = all
+inet_protocols = ipv4
+
+# relay externo
+
+smtp_sasl_auth_enable = yes
+smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+smtp_use_tls = yes
+smtp_sasl_security_options = noanonymous
+smtp_sasl_tls_security_options = noanonymous
+smtp_tls_note_starttls_offer = yes
+tls_random_source = dev:/dev/urandom
+smtp_tls_scert_verifydepth = 5
+smtp_tls_enforce_peername = no
+relayhost = <%= @relayhost %>:<%= @relayport %>
+smtp_tls_CAfile = <%= @smtp_tls_CAfile %>

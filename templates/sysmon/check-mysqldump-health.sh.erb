@@ -1,0 +1,81 @@
+#!/bin/bash
+
+# Validate if the MySQL database dumps can be restored
+
+MYSQLUSER="<%= @mysqluser %>"
+MYSQLPWD="<%= @mysqlpassword %>"
+RC_OK=0
+RC_CRITICAL=2
+RC_UNKNOWN=3
+
+function handle_error
+{
+  CODE=$1
+  ACTION=$2
+  INV=$3
+
+  # INV means to invert the handling logic
+  
+  if [ -z $INV ]; then
+    if [ $CODE -ne 0 ]; then
+      clear_database
+      echo "CRITICAL: $ACTION"
+      exit $RC_CRITICAL
+    fi
+  else
+   if [ $CODE -eq 0 ]; then
+      clear_database
+      echo "CRITICAL: $ACTION"
+      exit $RC_CRITICAL
+    fi
+  fi
+
+  return $RC_OK
+}
+
+clear_database() {
+  mysql -u $MYSQLUSER -p$MYSQLPWD -e "DROP DATABASE $DBNAME;" > /dev/null 2>&1
+  return $?
+}
+
+
+validate_dump() {
+  f=$1
+  DBNAME=`grep Database: $1 |grep '\-\- Host:'| sed -e "s/.*Database:\(.*\)/\1/" | tr -d " " | head -n 1`
+
+  mysql -u $MYSQLUSER -p$MYSQLPWD -e "CREATE DATABASE $DBNAME;" > /dev/null 2>&1
+  RC=$?
+  handle_error $RC "Create database $DBNAME"
+
+  mysql $DBNAME -u $MYSQLUSER -p$MYSQLPWD < $f > /dev/null 2>&1
+  RC=$?
+  handle_error $RC "Load database dump $f"
+
+  clear_database
+  RC=$?
+  handle_error $RC "Drop database $DBNAME"
+}
+
+
+validate_dir() {
+  cd $1
+  for f in `find . -name \*.sql`
+  do
+    if grep "MySQL dump" $f > /dev/null 
+    then
+       validate_dump $f
+    else
+       handle_error $RC "SQL File $f is not a MySQLDump"
+    fi
+  done
+}
+
+# Main
+DIRS="<%= @dirs %>"
+for d in $DIRS
+do
+  validate_dir $d
+done
+
+echo "OK: exit code $RC_OK"
+exit $RC_OK

@@ -1,0 +1,11 @@
+#!/bin/bash
+
+LOCKFILE=/var/lib/puppet/state/agent_catalog_run.lock
+DELAY=2
+
+while [ -f $LOCKFILE ]; do
+    sleep $DELAY
+done
+
+puppet agent --test
+

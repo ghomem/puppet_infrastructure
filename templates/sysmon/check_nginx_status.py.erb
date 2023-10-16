@@ -1,0 +1,108 @@
+#!/usr/bin/python3
+
+import requests
+import sys
+import argparse
+
+
+#nagios return codes
+UNKNOWN = 3
+OK = 0
+WARNING = 1
+CRITICAL = 2
+
+parser = argparse.ArgumentParser()
+# any metric
+parser.add_argument( '-w', '--warn', help = 'generate warning  if any metric exceeds num', default = '50')
+parser.add_argument( '-c', '--crit', help = 'generate critical if any metric exceeds num', default = '100')
+# Active_Connections
+parser.add_argument( '-m', '--active_connections_warning', help = 'generate warning  if Active_Connections exceeds num')
+parser.add_argument( '-M', '--active_connections_critical', help = 'generate critical if Active_Connections exceeds num')
+# Monit_Reading
+parser.add_argument( '-n', '--monit_reading_warning', help = 'generate warning  if Monit_Reading exceeds num')
+parser.add_argument( '-N', '--monit_reading_critical', help = 'generate critical if Monit_Reading exceeds num')
+# Monit_Writing
+parser.add_argument( '-o', '--monit_writing_warning', help = 'generate warning  if Monit_Writing exceeds num')
+parser.add_argument( '-O', '--monit_writing_critical', help = 'generate critical if Monit_Writing exceeds num')
+# Monit_Waiting
+parser.add_argument( '-p', '--monit_waiting_warning', help = 'generate warning  if Monit_Waiting exceeds num')
+parser.add_argument( '-P', '--monit_waiting_critical', help = 'generate critical if Monit_Waiting exceeds num')
+
+args = parser.parse_args()
+
+# default values for any metric
+warn = args.warn
+crit = args.crit
+
+# default values for each metric
+active_connections_warning  = args.active_connections_warning  if args.active_connections_warning  else warn
+active_connections_critical = args.active_connections_critical if args.active_connections_critical else crit
+monit_reading_warning       = args.monit_reading_warning       if args.monit_reading_warning       else warn
+monit_reading_critical      = args.monit_reading_critical      if args.monit_reading_critical      else crit
+monit_writing_warning       = args.monit_writing_warning       if args.monit_writing_warning       else warn
+monit_writing_critical      = args.monit_writing_critical      if args.monit_writing_critical      else crit
+monit_waiting_warning       = args.monit_waiting_warning       if args.monit_waiting_warning       else warn
+monit_waiting_critical      = args.monit_waiting_critical      if args.monit_waiting_critical      else crit
+
+# url for nginx stub status page
+nginx_status_url = "http://" + "<%= @fqdn_monitoring_server %>" + "/nginx_status"
+# get output from nginx status page
+r = requests.get(nginx_status_url)
+# turn the output into a list of strings
+my_list = r.text.split(" ")
+# attach numeric outputs to a new list
+new_list = []
+for i in my_list:
+    if i.isdigit():
+        new_list.append(i)
+
+# a class for the things we monitor
+class Service:
+    def __init__(self, name = "", value = "", warn = "", crit = ""):
+        self.name  = name
+        self.value = value
+        self.warn  = warn
+        self.crit  = crit
+
+    def show_data(self):
+        return self.name + "=" + self.value + ";" + self.warn + ";" + self.crit + "; "
+
+
+# instantiate the class with each service
+active_connections = Service("Active_Connections", new_list[0], active_connections_warning, active_connections_critical)
+server_accepts     = Service("Server_Accepts",     new_list[1])
+server_handles     = Service("Server_Handles",     new_list[2])
+server_requests    = Service("Server_Requests",    new_list[3])
+monit_reading      = Service("Monit_Reading",      new_list[4], monit_reading_warning, monit_reading_critical)
+monit_writing      = Service("Monit_Writing",      new_list[5], monit_writing_warning, monit_writing_critical)
+monit_waiting      = Service("Monit_Waiting",      new_list[6], monit_waiting_warning, monit_waiting_critical)
+
+#put all Service objects in a list
+services = [active_connections, monit_reading, monit_writing, monit_waiting, server_accepts, server_handles, server_requests]
+
+is_warning  = False
+is_critical = False
+
+# output for nagios
+result_string = ""
+for s in services:
+    result_string += s.show_data()
+    if s.warn != "":
+        if int(s.warn) < int(s.value):
+            is_warning = True
+    if s.crit != "":
+        if int(s.crit) < int(s.value):
+            is_critical = True
+
+status_string = "OK"
+exit_code     = OK
+if is_critical:
+    status_string = "CRITICAL"
+    exit_code     = CRITICAL
+elif is_warning:
+    status_string = "WARNING"
+    exit_code     = WARNING
+
+status_string += " : exit code " + str(exit_code) + " | "
+print(status_string, result_string)
+sys.exit(exit_code)

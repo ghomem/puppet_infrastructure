@@ -1,0 +1,25 @@
+[global]
+client min protocol = SMB3_11
+client max protocol = SMB3_11
+security = domain
+netbios name = <%= @hostname %>
+realm = <%= @domain_netbios_name %>.<%= @domain_tld %>
+# originally we had "password server" but this is the recommended setting
+wins server = <%= @domain_hostname %>.<%= @domain_netbios_name %>.<%= @domain_tld %>
+workgroup = <%= @domain_netbios_name %>
+# needed to join Samba after recent security problems 
+client ipc signing = auto
+idmap config * : range = 1000000-1999999
+idmap config * : backend = tdb
+idmap config <%= @domain_netbios_name %> : range = 2000-302000
+idmap config <%= @domain_netbios_name %> : backend = rid
+winbind separator = <%= @winbind_separator %>
+winbind enum users = yes
+winbind enum groups = yes
+winbind use default domain = yes
+#template homedir = /home/%D/%U
+# WA folderview vs long paths
+template homedir = /home/%U
+template shell = /bin/bash
+client use spnego = yes
+domain master = no

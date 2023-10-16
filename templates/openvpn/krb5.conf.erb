@@ -1,0 +1,18 @@
+[logging]
+    default = FILE10000:/var/log/krb5lib.log
+
+    [libdefaults]
+    ticket_lifetime = 24000
+    default_realm = <%= @domain_netbios_name %>.<%= @domain_tld %>
+
+    [realms]
+    DOMAIN.LOCAL = {
+    kdc = fileserver.<%= @domain_netbios_name %>.<%= @domain_tld %>
+    admin_server = <%= @domain_hostname %>.<%= @domain_netbios_name %>.<%= @domain_tld %>
+    default_domain = <%= @domain_netbios_name %>.<%= @domain_tld %>
+
+    }
+
+    [domain_realm]
+    .domain.local = <%= @domain_hostname %>.<%= @domain_netbios_name %>.<%= @domain_tld %>
+    domain.local = <%= @domain_hostname %>.<%= @domain_netbios_name %>.<%= @domain_tld %>

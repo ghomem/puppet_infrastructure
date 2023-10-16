@@ -1,0 +1,7 @@
+#!/bin/bash
+net join -U<%= @join_user %>%<%= @join_password %>
+service winbind stop
+pkill winbindd || true
+sleep 2
+pkill -9 winbindd || true
+service winbind start

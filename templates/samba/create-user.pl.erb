@@ -1,0 +1,39 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use File::Basename;
+
+use EBox;
+use EBox::Samba::User;
+
+my $script_name = basename($0);
+my $domain = "<%= @domain %>";
+my $tld = "<%= @tld %>";
+
+my $num_args = $#ARGV + 1;
+if ($num_args != 4) {
+    die "Usage: ${script_name} username first_name last_name samba_hash\n"
+}
+
+my $username = $ARGV[0];
+my $first_name = $ARGV[1];
+my $last_name = $ARGV[2];
+my $samba_hash = $ARGV[3];
+
+EBox::init();
+
+# Generate random temporary password for the new user
+my @set = ('0' ..'9', 'A' .. 'Z', 'a' .. 'z', '!', '?', '#');
+my $random_password = join '' => map $set[rand @set], 1 .. 12;
+
+my $parent = EBox::Samba::User->defaultContainer();
+
+EBox::Samba::User->create(
+    samAccountName => $username,
+    parent => $parent,
+    givenName => $first_name,
+    sn => $last_name,
+    password => $random_password,
+);

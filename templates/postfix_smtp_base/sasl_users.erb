@@ -1,0 +1,4 @@
+# Contains user:password_hash for SALS authentication (using Dovecot)
+<% @smtp_users.each do |smtp_user| -%>
+<%=smtp_user['name']%>:<%=smtp_user['password_hash']%>
+<% end -%>

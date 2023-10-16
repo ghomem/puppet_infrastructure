@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hashman @ Solid Angle</title>
+    <meta name="description" content="A minimalist layout for Login pages. Built with Pico CSS." />
+    <link rel="shortcut icon" href="{{ url_for('static',filename='img/logo.png')  }}" />
+
+    <!-- Pico.css -->
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles/pico.min.css')  }}" />
+
+    <!-- Custom style -->
+    <link rel="stylesheet" href="{{ url_for('static',filename='styles/custom.css')  }}" />
+
+  </head>
+
+  <body>
+    <!-- Main -->
+    <main class="scale-down" class="container" style="width: 500px" >
+      <article class="grid" style="margin-top: -5rem; margin-bottom: -5rem">
+        <div style="text-align: center;">
+          <hgroup>
+	    {% if strcname %}
+	    <p><strong>Welcome, {{ strcname | safe }}!</strong> You can change your password using the form below: <br/> </p>
+	    {% endif %}
+
+            <form action="changepw" method="post" enctype="multipart/form-data" id="my_form">
+              <div class="text-center">
+                <label for="oldpassword">Old Password
+                  <input
+                      id="oldpassword"
+                      type="password"
+                      name="oldpassword"
+                      placeholder="Type your old password"
+                      autocomplete="off"
+                      onkeyup="checkPass('oldpassword', 'newpassword','newpassword2'); return false;"
+                      onchange="checkPass('oldpassword', 'newpassword','newpassword2'); return false;">
+                </label>
+
+                  <label for="newpassword">New Password
+                    <input
+                           id="newpassword"
+                           type="password"
+                           name="newpassword"
+                           placeholder="Type your new password"
+                           autocomplete="off"
+                           onkeyup="checkPass('oldpassword', 'newpassword','newpassword2'); return false;"
+                           onchange="checkPass('oldpassword', 'newpassword','newpassword2'); return false;">
+                  </label>
+
+                  <label for="newpassword2">Confirm New Password
+                    <input
+                        id="newpassword2"
+                        type="password"
+                        name="newpassword2"
+                        placeholder="Confirm your new password"
+                        autocomplete="off"
+                        onkeyup="checkPass('oldpassword', 'newpassword','newpassword2'); return false;"
+                        onchange="checkPass('oldpassword', 'newpassword','newpassword2'); return false;">
+                  </label>
+
+                    <!-- placeholder for the Javascript generated message -->
+                    <span id="confirmMessage" class="confirmMessage" style="display: block; margin-bottom: 1em;"></span>
+                    <!-- -->
+                    <div class="button-group">
+                      <button class="contrast" type="submit" id='passbutton' disabled>Change Password</button>
+                      <a href="/logout" class="secondary button" id="logoutbutton">Logout</a>
+                    </div>
+              </div>
+            </form>
+            <hr class="divider">
+            <!-- Footer -->
+            <footer class="container-fluid">
+              <small>
+                Need help?
+                <a
+                  href="#"
+                  class="secondary"
+                  data-target="modal-example"
+                  onClick="event.preventDefault(); toggleModal(event)"
+                >
+                  Click here
+               </a>
+            </small>
+          </footer>
+    <!-- ./ Footer -->
+
+    </main>
+    <!-- ./ Main -->
+
+    <!-- Include Modal -->
+    {% include 'modal.html' %}
+
+    <!-- Include JS Scripts -->
+    <script src="{{ url_for('static',filename='js/customvalidation.js')  }}" ></script>
+    <script src="{{ url_for('static',filename='js/pico/modal-handler.js')  }}" ></script>
+    <script> function resetForm( formId ) { document.getElementById(formId).reset(); } </script>
+    <script>
+      // Clear all input fields and textareas on page load
+      window.onload = function() {
+        const inputs = document.querySelectorAll("input, textarea");
+        inputs.forEach((input) => {
+          input.value = '';
+        console.log("Page loaded!");
+        });
+
+        const helpButton = document.getElementById('helpbutton');
+        helpButton.addEventListener('click', function(e) {
+          if (!checkHelpFields('name', 'email', 'msg', 'helpbutton')) {
+            e.preventDefault();
+          }
+        });
+        checkHelpFields('name', 'email', 'msg', 'helpbutton');
+        checkPass('oldpassword', 'newpassword','newpassword2');
+      };
+    </script>
+    <script>
+        // client side session timeout logic
+        var timeoutInMiliseconds = {{ session_timeout * 1000 }};
+        var timeoutId;
+
+        function startTimer() {
+            // window.setTimeout returns an Id that can be used to start and stop a timer
+            timeoutId = window.setTimeout(doInactive, timeoutInMiliseconds);
+        }
+
+        function doInactive() {
+            console.log('found inactive');
+            window.location.replace("/expired");
+        }
+
+        function resetTimer() {
+            window.clearTimeout(timeoutId)
+            startTimer();
+        }
+
+        function setupTimers() {
+            document.addEventListener("mousemove", resetTimer, false);
+            document.addEventListener("mousedown", resetTimer, false);
+            document.addEventListener("keypress", resetTimer, false);
+            document.addEventListener("touchmove", resetTimer, false);
+
+            startTimer();
+        }
+
+        // managed by puppet
+        if ("True" == "{{ session_expiration }}") {
+            setupTimers();
+        }
+    </script>
+    <script>
+        document.getElementById('helpbutton').addEventListener('click', function() {
+          var form = document.getElementById('reqhelp');
+
+          //wait for 5 seconds
+      setTimeout(function() {
+        // Submit the form
+            form.submit();
+
+          }, 5000);
+          // Show the confirmation modal
+          document.getElementById('confirmation-modal').showModal();
+      });
+    </script>
+  </body>
+</html>
