@@ -15,11 +15,6 @@ GPLv3 as defined on the LICENSE file.
 * Only tested baseline best practices
 * Comments on non-trivial code
 
-### Who do I talk to? ###
-
-* Gustavo Homem
-* Pedro Pessoa
-
 ### How do I install the pre-commit hook? ###
 
 Follow the procedure to install the puppet agent until (excluding) "Sign certificate on master":
