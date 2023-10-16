@@ -17,10 +17,6 @@ GPLv3 as defined on the LICENSE file.
 
 ### How do I install the pre-commit hook? ###
 
-Follow the procedure to install the puppet agent until (excluding) "Sign certificate on master":
-
-https://bitbucket.org/asolidodev/puppet_infrastructure/wiki/Node%20Configuration
-
 Install puppet-lint from the repository:
 
 ```sudo apt-get install puppet-lint```
