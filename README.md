@@ -4,7 +4,7 @@ Common baseline Puppet Classes
 
 ### What is this repository for? ###
 
-* Common baseline Puppet Classes
+Common baseline Puppet Classes that automate Linux infrastructure.
 
 ### What is the License? ###
 
