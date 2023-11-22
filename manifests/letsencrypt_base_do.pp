@@ -1,8 +1,9 @@
 class puppet_infrastructure::letsencrypt_base_do (
   String $email,
   String $do_creds_file,
+  String $do_api_token,
+  Array[String] $domains,
   Boolean $automate_deployment        = false,
-  Array[String] $domains              = ["solidangle.eu"],
   Integer $renew_cron_hour            = 4,
   Integer $renew_cron_minute          = 0,
   Integer $deploy_cron_hour           = 5,
