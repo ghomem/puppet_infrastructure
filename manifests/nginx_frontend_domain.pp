@@ -218,7 +218,7 @@ define puppet_infrastructure::nginx_frontend_domain (
   # define resolver and local ttl for cached DNS records
   # requires $dynamic_dns_resolution to be true
   # Syntax example ['127.0.0.1 valid=10s']
-  Array $resolver = [],
+  Array $resolver = ['127.0.0.53 valid=10s'],
   # Issue #286 we expose the proxy timeout variables here to avoid timeouts when a web request is waiting for a response
   # from some server side process that can take more than 90 seconds, for example, zipping large files.
   # These variables seems to work with both '90s' and '90', but to stay consistent with NGINX configs, we will always use '90s'

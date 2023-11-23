@@ -72,7 +72,7 @@ class puppet_infrastructure::nginx_frontend (
   Array $ip_whitelist                 = [],
   Boolean $use_compact_log_format     = false,
   Boolean $dynamic_dns_resolution     = false,
-  Array $resolver                     = [],
+  Array $resolver                     = ['127.0.0.53 valid=10s'],
   # Issue #286 we expose the proxy timeout variables here, but they are used and documented in nginx_frontend_domain
   String $proxy_read_timeout          = '90s',
   String $proxy_connect_timeout       = '90s',
