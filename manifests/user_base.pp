@@ -22,7 +22,7 @@ define puppet_infrastructure::user_base( $myname = 'Dummy Dummier', $myhash = ''
   }
 
   # if the group list is empty or contains only sudo the default applies
-  if ( $mygrouplist == [] or $mygrouplist[0] == 'sudo' ){
+  if ( $mygrouplist == [] or $mygrouplist[0] == 'sudo' or $mygrouplist[0] == 'wheel' ){
     $myprimary = $title
   }
   else # otherwise we use the first group on the list as primary
