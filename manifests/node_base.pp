@@ -49,12 +49,8 @@ class puppet_infrastructure::node_base ( Boolean $password_authentication       
 
   $os_family = $facts['os']['family']
 
-  class { 'puppet_infrastructure::server_ppa':
-    server_ppa => $server_ppa,
-  }
   class { 'puppet_infrastructure::packages_base':
     unattended_upgrades => false,
-    require             => Class['puppet_infrastructure::server_ppa'],
   }
   include puppet_infrastructure::sysmon_base
   include puppet_infrastructure::mcollective_node
