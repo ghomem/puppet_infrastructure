@@ -90,7 +90,7 @@ class puppet_infrastructure::node_base ( Boolean $password_authentication       
     syslog_mode           => $syslog_mode,
   }
 
-  if os_family == 'RedHat' {
+  if $os_family == 'RedHat' {
     include puppet_infrastructure::filesystem_yum
   } else {
     class { 'puppet_infrastructure::filesystem_apt':
