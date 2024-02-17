@@ -107,7 +107,6 @@ class puppet_infrastructure::sysmon_base {
   group   => 'root',
   content => template('puppet_infrastructure/sysmon/check_cpu.py.erb'),
   require => Class['puppet_infrastructure::packages_base'],
-  require => Package[ $packagename ],
   }
 
 # memory
@@ -117,7 +116,6 @@ class puppet_infrastructure::sysmon_base {
   group   => 'root',
   source  => 'puppet:///modules/puppet_infrastructure/sysmon/check_mem.pl',
   require => Class['puppet_infrastructure::packages_base'],
-  require => Package[ $packagename ],
   }
 
 # operating system version
