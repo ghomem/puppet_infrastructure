@@ -52,7 +52,9 @@ class puppet_infrastructure::node_base ( Boolean $password_authentication       
   class { 'puppet_infrastructure::packages_base':
     unattended_upgrades => false,
   }
-  include puppet_infrastructure::sysmon_base
+  class { 'puppet_infrastructure::sysmon_base':
+    require => Class['puppet_infrastructure::packages_base']
+  }
   include puppet_infrastructure::mcollective_node
 
   class { 'puppet_infrastructure::ssh_secure': password_authentication => $password_authentication, root_login => $ssh_allow_root_login, port => $ssh_port, host_keys => $host_keys, kex_algorithm => $kex_algorithm, ciphers => $ciphers, macs => $macs}
