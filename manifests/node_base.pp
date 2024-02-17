@@ -47,6 +47,8 @@ class puppet_infrastructure::node_base ( Boolean $password_authentication       
                                   Boolean $filesystem_security                      = true,
 ) {
 
+  $os_family = $facts['os']['family']
+
   class { 'puppet_infrastructure::server_ppa':
     server_ppa => $server_ppa,
   }
@@ -89,12 +91,16 @@ class puppet_infrastructure::node_base ( Boolean $password_authentication       
     customize_syslog_mode => $customize_syslog_mode,
     syslog_mode           => $syslog_mode,
   }
-  include puppet_infrastructure::filesystem_lib64
-  class { 'puppet_infrastructure::filesystem_apt':
-    apt_surface_list           => $apt_surface_list,
-    server_mode                => true,
-    relevant_updates_method    => $relevant_updates_method,
-    relevant_updates_no_kernel => $relevant_updates_no_kernel,
+
+  if os_family == 'RedHat' {
+    include puppet_infrastructure::filesystem_yum
+  } else {
+    class { 'puppet_infrastructure::filesystem_apt':
+      apt_surface_list           => $apt_surface_list,
+      server_mode                => true,
+      relevant_updates_method    => $relevant_updates_method,
+      relevant_updates_no_kernel => $relevant_updates_no_kernel,
+    }
   }
 
   # per node definition overrides default definition
