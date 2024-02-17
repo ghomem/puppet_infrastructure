@@ -110,16 +110,33 @@ class puppet_infrastructure::node_base ( Boolean $password_authentication       
   if $filesystem_security {
     puppet_infrastructure::filesystem_sec { 'filesystem_sec': restricted_cmds => $restricted_cmds, restricted_group => $restricted_group , restricted_mode => $restricted_mode }
   }
-  if $custom_ntp {
-    if $ntp_servers.empty {
-      fail('$ntp_servers must be passed if setting custom NTP.')
-    }
 
-    class { 'ntp':
-      servers => $ntp_servers,
+  if $facts['os']['family'] == 'RedHat' {
+    # For RHEL-based systems, use Chrony
+    if $custom_ntp {
+      if $ntp_servers.empty {
+        fail('$ntp_servers must be passed if setting custom NTP.')
+      }
+
+      class { 'chrony':
+        servers => $ntp_servers,
+      }
+    } else {
+      include ::chrony
     }
   } else {
-    include ::ntp
+    # For non-RHEL systems, use NTP
+    if $custom_ntp {
+      if $ntp_servers.empty {
+        fail('$ntp_servers must be passed if setting custom NTP.')
+      }
+
+      class { 'ntp':
+        servers => $ntp_servers,
+      }
+    } else {
+      include ::ntp
+    }
   }
 
   if ($run_puppet_on_boot){
