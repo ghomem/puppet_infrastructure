@@ -8,7 +8,11 @@ class puppet_infrastructure::mcollective_node {
   $mcouser   = lookup(mcollective_node::mcouser)
   $mcopass   = lookup(mcollective_node::mcopass)
 
-  # Ensure the parent directory exists
+  # Ensure the entire directory path exists
+  file { '/opt/puppetlabs/mcollective':
+    ensure => directory,
+  }
+
   file { '/opt/puppetlabs/mcollective/plugins':
     ensure => directory,
   }
