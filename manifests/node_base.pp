@@ -90,6 +90,8 @@ class puppet_infrastructure::node_base ( Boolean $password_authentication       
     syslog_mode           => $syslog_mode,
   }
 
+  include puppet_infrastructure::filesystem_lib64
+
   if $os_family == 'RedHat' {
     include puppet_infrastructure::filesystem_yum
   } else {
