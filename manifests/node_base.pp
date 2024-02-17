@@ -104,8 +104,11 @@ class puppet_infrastructure::node_base ( Boolean $password_authentication       
   # per node definition overrides default definition
   $restricted_cmds  = lookup( [ "${clientcert}::filesystem::restricted_cmds",  'filesystem::restricted_cmds'  ] )
   $restricted_mode  = lookup( [ "${clientcert}::filesystem::restricted_mode",  'filesystem::restricted_mode'  ] )
-  $restricted_group = lookup( [ "${clientcert}::filesystem::restricted_group", 'filesystem::restricted_group' ] )
-
+  if $os_family == 'RedHat' {
+    $restricted_group = lookup( [ "${clientcert}::filesystem::restricted_group", 'filesystem::restricted_group_rhel' ] )
+  } else {
+    $restricted_group = lookup( [ "${clientcert}::filesystem::restricted_group", 'filesystem::restricted_group_ubuntu' ] )
+  }
 
   if $filesystem_security {
     puppet_infrastructure::filesystem_sec { 'filesystem_sec': restricted_cmds => $restricted_cmds, restricted_group => $restricted_group , restricted_mode => $restricted_mode }
