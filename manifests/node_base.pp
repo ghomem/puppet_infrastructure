@@ -63,13 +63,9 @@ class puppet_infrastructure::node_base ( Boolean $password_authentication       
 
   if $os_family == 'RedHat' {
 
-    # Stop the firewalld service
+    # Stop and disable the firewalld service to prevent it from starting at boot
     service { 'firewalld':
       ensure => 'stopped',
-    }
-
-    # Disable the firewalld service to prevent it from starting at boot
-    service { 'firewalld':
       enable => false,
     }
 
