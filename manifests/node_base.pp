@@ -61,6 +61,28 @@ class puppet_infrastructure::node_base ( Boolean $password_authentication       
 
   class { 'puppet_infrastructure::ssh_secure': password_authentication => $password_authentication, root_login => $ssh_allow_root_login, port => $ssh_port, host_keys => $host_keys, kex_algorithm => $kex_algorithm, ciphers => $ciphers, macs => $macs}
 
+  if $os_family == 'RedHat' {
+
+    # Stop the firewalld service
+    service { 'firewalld':
+      ensure => 'stopped',
+    }
+
+    # Disable the firewalld service to prevent it from starting at boot
+    service { 'firewalld':
+      enable => false,
+    }
+
+    # Mask the firewalld service to prevent manual start
+    exec { 'mask firewalld':
+      command => '/bin/systemctl mask firewalld',
+      unless  => '/bin/systemctl is-enabled firewalld | /bin/grep masked',
+      require => Service['firewalld'],
+    }
+
+  }
+
+
   if ($firewall_secure_extra){
     class { 'puppet_infrastructure::firewall_secure_extra':
       strict                   => $ssh_strict,
