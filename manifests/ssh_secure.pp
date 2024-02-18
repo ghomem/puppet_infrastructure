@@ -15,9 +15,11 @@ class puppet_infrastructure::ssh_secure (
   case $::osfamily {
       'RedHat': {
         $ssh_service = 'sshd'
+        $admin_group = 'wheel'
       }
       default: {
         $ssh_service = 'ssh'
+        $admin_group = 'sudo'
       }
   }
 
@@ -74,7 +76,7 @@ class puppet_infrastructure::ssh_secure (
       'ClientAliveInterval'     => $client_alive_interval,
       'UsePrivilegeSeparation'  => 'yes' ,
       'X11DisplayOffset'        => '10' ,
-      'AllowGroups'             => "sudo nagios ${othergroups} wheel" ,
+      'AllowGroups'             => "${admin_group} nagios ${othergroups}" ,
     },
   }
 

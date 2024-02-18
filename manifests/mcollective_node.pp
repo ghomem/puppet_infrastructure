@@ -8,19 +8,6 @@ class puppet_infrastructure::mcollective_node {
   $mcouser   = lookup(mcollective_node::mcouser)
   $mcopass   = lookup(mcollective_node::mcopass)
 
-  # Ensure the entire directory path exists
-  file { '/opt/puppetlabs/mcollective':
-    ensure => directory,
-  }
-
-  file { '/opt/puppetlabs/mcollective/plugins':
-    ensure => directory,
-  }
-
-  file { '/etc/puppetlabs/mcollective':
-    ensure => directory,
-  }
-
   # create directories and push files
   file { [ $libdir , "${libdir}/agent/" , "${libdir}/agent/shell", "${libdir}/application","${libdir}/application/shell"]: ensure => directory }
   -> file { "${libdir}/agent/shell.ddl": source => 'puppet:///modules/puppet_infrastructure/mcollective/agent/shell.ddl', }
