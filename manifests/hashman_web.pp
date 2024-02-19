@@ -147,8 +147,6 @@ class puppet_infrastructure::hashman_web (
   }
 
   file { "${hashmandir}/httpserver/static/img/valid.png":
-
-  file { "${hashmandir}/httpserver/static/img/valid.png":
     mode    => '0644',
     owner   => 'root',
     group   => 'root',
