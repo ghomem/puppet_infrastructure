@@ -47,17 +47,37 @@ class puppet_infrastructure::node_base ( Boolean $password_authentication       
                                   Boolean $filesystem_security                      = true,
 ) {
 
-  class { 'puppet_infrastructure::server_ppa':
-    server_ppa => $server_ppa,
-  }
+  $os_family = $facts['os']['family']
+
   class { 'puppet_infrastructure::packages_base':
     unattended_upgrades => false,
-    require             => Class['puppet_infrastructure::server_ppa'],
   }
-  include puppet_infrastructure::sysmon_base
-  include puppet_infrastructure::mcollective_node
+  class { 'puppet_infrastructure::sysmon_base':
+    require => Class['puppet_infrastructure::packages_base']
+  }
+  if $os_family == 'Debian' {
+    include puppet_infrastructure::mcollective_node
+  }
 
   class { 'puppet_infrastructure::ssh_secure': password_authentication => $password_authentication, root_login => $ssh_allow_root_login, port => $ssh_port, host_keys => $host_keys, kex_algorithm => $kex_algorithm, ciphers => $ciphers, macs => $macs}
+
+  if $os_family == 'RedHat' {
+
+    # Stop and disable the firewalld service to prevent it from starting at boot
+    service { 'firewalld':
+      ensure => 'stopped',
+      enable => false,
+    }
+
+    # Mask the firewalld service to prevent manual start
+    exec { 'mask firewalld':
+      command => '/bin/systemctl mask firewalld',
+      unless  => '/bin/systemctl is-enabled firewalld | /bin/grep masked',
+      require => Service['firewalld'],
+    }
+
+  }
+
 
   if ($firewall_secure_extra){
     class { 'puppet_infrastructure::firewall_secure_extra':
@@ -89,33 +109,58 @@ class puppet_infrastructure::node_base ( Boolean $password_authentication       
     customize_syslog_mode => $customize_syslog_mode,
     syslog_mode           => $syslog_mode,
   }
-  include puppet_infrastructure::filesystem_lib64
-  class { 'puppet_infrastructure::filesystem_apt':
-    apt_surface_list           => $apt_surface_list,
-    server_mode                => true,
-    relevant_updates_method    => $relevant_updates_method,
-    relevant_updates_no_kernel => $relevant_updates_no_kernel,
+
+  if $os_family == 'RedHat' {
+    include puppet_infrastructure::filesystem_yum
+  } else {
+    include puppet_infrastructure::filesystem_lib64
+    class { 'puppet_infrastructure::filesystem_apt':
+      apt_surface_list           => $apt_surface_list,
+      server_mode                => true,
+      relevant_updates_method    => $relevant_updates_method,
+      relevant_updates_no_kernel => $relevant_updates_no_kernel,
+    }
   }
 
   # per node definition overrides default definition
   $restricted_cmds  = lookup( [ "${clientcert}::filesystem::restricted_cmds",  'filesystem::restricted_cmds'  ] )
   $restricted_mode  = lookup( [ "${clientcert}::filesystem::restricted_mode",  'filesystem::restricted_mode'  ] )
-  $restricted_group = lookup( [ "${clientcert}::filesystem::restricted_group", 'filesystem::restricted_group' ] )
-
+  if $os_family == 'RedHat' {
+    $restricted_group = lookup( [ "${clientcert}::filesystem::restricted_group", 'filesystem::restricted_group_rhel' ] )
+  } else {
+    $restricted_group = lookup( [ "${clientcert}::filesystem::restricted_group", 'filesystem::restricted_group_ubuntu' ] )
+  }
 
   if $filesystem_security {
     puppet_infrastructure::filesystem_sec { 'filesystem_sec': restricted_cmds => $restricted_cmds, restricted_group => $restricted_group , restricted_mode => $restricted_mode }
   }
-  if $custom_ntp {
-    if $ntp_servers.empty {
-      fail('$ntp_servers must be passed if setting custom NTP.')
-    }
 
-    class { 'ntp':
-      servers => $ntp_servers,
+  if $facts['os']['family'] == 'RedHat' {
+    # For RHEL-based systems, use Chrony
+    if $custom_ntp {
+      if $ntp_servers.empty {
+        fail('$ntp_servers must be passed if setting custom NTP.')
+      }
+
+      class { 'chrony':
+        servers => $ntp_servers,
+      }
+    } else {
+      include ::chrony
     }
   } else {
-    include ::ntp
+    # For non-RHEL systems, use NTP
+    if $custom_ntp {
+      if $ntp_servers.empty {
+        fail('$ntp_servers must be passed if setting custom NTP.')
+      }
+
+      class { 'ntp':
+        servers => $ntp_servers,
+      }
+    } else {
+      include ::ntp
+    }
   }
 
   if ($run_puppet_on_boot){
