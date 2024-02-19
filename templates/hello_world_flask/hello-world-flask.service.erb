@@ -4,7 +4,7 @@ Wants=basic.target
 After=basic.target network.target
 
 [Service]
-ExecStart=/usr/bin/gunicorn --bind <%= @ip_address %>:<%= @port %> wsgi:app
+ExecStart=python3 -m gunicorn --bind <%= @ip_address %>:<%= @port %> wsgi:app
 KillMode=process
 WorkingDirectory=<%= @app_dir %>
 
