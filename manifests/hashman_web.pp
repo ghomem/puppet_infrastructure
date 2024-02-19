@@ -29,6 +29,7 @@ class puppet_infrastructure::hashman_web (
   $companywebsite      = lookup('hashman::companywebsite')
   $localdir            = lookup('filesystem::localdir')
   $sslprefix           = lookup('hashman::sslprefix')
+  $hashmancompanylogo  = lookup( { 'name' => 'hashman::companylogo', 'default_value' => 'img/logo.png' } )
   $client_side_timeout = lookup( { 'name' => 'hashman::client_side_timeout', 'default_value' => 600 } )
   $server_side_timeout = lookup( { 'name' => 'hashman::server_side_timeout', 'default_value' => 1800 } )
   $session_expiration  = lookup( { 'name' => 'hashman::active_session_expiration', 'default_value' => 'False' } )
@@ -102,23 +103,43 @@ class puppet_infrastructure::hashman_web (
     group  => 'root',
   }
 
-  # this file is outside the tree because we don't want it to be overwritten
-  file { "${hashmandir}/httpserver/static/img/logo.png":
-    mode    => '0644',
-    owner   => 'root',
-    group   => 'root',
-    replace => 'no',
-    source  => 'puppet:///modules/puppet_infrastructure/hashman/extra/logo.png',
-    require => File[ "${hashmandir}/httpserver", "${hashmandir}/httpserver/static/img/" ],
-  }
+  if $hashmancompanylogo == 'img/logo.png' {
+    # this file is outside the tree because we don't want it to be overwritten
+    file { "${hashmandir}/httpserver/static/img/logo.png":
+      mode    => '0644',
+      owner   => 'root',
+      group   => 'root',
+      replace => 'no',
+      source  => 'puppet:///modules/puppet_infrastructure/hashman/extra/logo.png',
+      require => File[ "${hashmandir}/httpserver", "${hashmandir}/httpserver/static/img/" ],
+    }
 
-  file { "${hashmandir}/httpserver/static/img/logo-email.png":
-    mode    => '0644',
-    owner   => 'root',
-    group   => 'root',
-    replace => 'no',
-    source  => 'puppet:///modules/puppet_infrastructure/hashman/extra/logo-email.png',
-    require => File[ "${hashmandir}/httpserver", "${hashmandir}/httpserver/static/img/" ],
+    file { "${hashmandir}/httpserver/static/img/logo-email.png":
+      mode    => '0644',
+      owner   => 'root',
+      group   => 'root',
+      replace => 'no',
+      source  => 'puppet:///modules/puppet_infrastructure/hashman/extra/logo-email.png',
+      require => File[ "${hashmandir}/httpserver", "${hashmandir}/httpserver/static/img/" ],
+    }
+  } else {
+    file { "${hashmandir}/httpserver/static/img/logo.png":
+      mode    => '0644',
+      owner   => 'root',
+      group   => 'root',
+      replace => 'no',
+      source  => "${hashmancompanylogo}",
+      require => File[ "${hashmandir}/httpserver", "${hashmandir}/httpserver/static/img/" ],
+    }
+
+    file { "${hashmandir}/httpserver/static/img/logo-email.png":
+      mode    => '0644',
+      owner   => 'root',
+      group   => 'root',
+      replace => 'no',
+      source  => "${hashmancompanylogo}",
+      require => File[ "${hashmandir}/httpserver", "${hashmandir}/httpserver/static/img/" ],
+    }
   }
 
   file { "${hashmandir}/httpserver/static/img/valid.png":
