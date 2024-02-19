@@ -30,7 +30,7 @@ class puppet_infrastructure::hashman_web (
   $localdir               = lookup('filesystem::localdir')
   $sslprefix              = lookup('hashman::sslprefix')
   $hashmancompanylogo     = lookup( { 'name' => 'hashman::companylogo', 'default_value' => 'img/logo.png' } )
-  $hashmancompanylogomail = lookup( { 'name' => 'hashman::companylogo', 'default_value' => 'img/logo-mail.png' } )
+  $hashmancompanylogomail = lookup( { 'name' => 'hashman::companylogo', 'default_value' => 'img/logo-email.png' } )
   $client_side_timeout    = lookup( { 'name' => 'hashman::client_side_timeout', 'default_value' => 600 } )
   $server_side_timeout    = lookup( { 'name' => 'hashman::server_side_timeout', 'default_value' => 1800 } )
   $session_expiration     = lookup( { 'name' => 'hashman::active_session_expiration', 'default_value' => 'False' } )
@@ -125,14 +125,14 @@ class puppet_infrastructure::hashman_web (
     }
   }
 
-  if $hashmancompanylogomail == 'img/logo-mail.png' {
+  if $hashmancompanylogomail == 'img/logo-email.png' {
     # this file is outside the tree because we don't want it to be overwritten
-    file { "${hashmandir}/httpserver/static/img/logo-mail.png":
+    file { "${hashmandir}/httpserver/static/img/logo-email.png":
       mode    => '0644',
       owner   => 'root',
       group   => 'root',
       replace => 'yes',
-      source  => 'puppet:///modules/puppet_infrastructure/hashman/extra/logo-mail.png',
+      source  => 'puppet:///modules/puppet_infrastructure/hashman/extra/logo-email.png',
       require => File[ "${hashmandir}/httpserver", "${hashmandir}/httpserver/static/img/" ],
     }
   } else {
