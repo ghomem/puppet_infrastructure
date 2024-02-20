@@ -30,7 +30,7 @@ class puppet_infrastructure::hashman_web (
   $localdir               = lookup('filesystem::localdir')
   $sslprefix              = lookup('hashman::sslprefix')
   $hashmancompanylogo     = lookup( { 'name' => 'hashman::companylogo', 'default_value' => 'img/logo.png' } )
-  $hashmancompanylogomail = lookup( { 'name' => 'hashman::companylogo', 'default_value' => 'img/logo-email.png' } )
+  $hashmancompanylogomail = lookup( { 'name' => 'hashman::companylogomail', 'default_value' => 'img/logo-email.png' } )
   $client_side_timeout    = lookup( { 'name' => 'hashman::client_side_timeout', 'default_value' => 600 } )
   $server_side_timeout    = lookup( { 'name' => 'hashman::server_side_timeout', 'default_value' => 1800 } )
   $session_expiration     = lookup( { 'name' => 'hashman::active_session_expiration', 'default_value' => 'False' } )
