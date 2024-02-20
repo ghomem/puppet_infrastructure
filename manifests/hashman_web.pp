@@ -136,7 +136,7 @@ class puppet_infrastructure::hashman_web (
       require => File[ "${hashmandir}/httpserver", "${hashmandir}/httpserver/static/img/" ],
     }
   } else {
-    file { "${hashmandir}/httpserver/static/img/logo-mail.png":
+    file { "${hashmandir}/httpserver/static/img/logo-email.png":
       mode    => '0644',
       owner   => 'root',
       group   => 'root',
