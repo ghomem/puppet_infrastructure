@@ -32,17 +32,13 @@ class puppet_infrastructure::filesystem_base (
   }
 
   case $facts['os']['family'] {
-    # on CentOS and similar RedHat systems we want mypython to link to python2 on '/usr/bin/python'
+    # on CentOS and similar RedHat systems we want mypython to link to python3 on '/usr/bin/python3'
     'RedHat': {
-      $mypython_target = '/usr/bin/python'
+      $mypython_target = '/usr/bin/python3'
       $syslog_filepath = '/var/log/messages'
       $syslog_owner    = 'root'
       $syslog_group    = 'root'
     }
-    # We consider Ubuntu be our default OS ('Debian' family)
-    # in that case there may be no /usr/bin/python (python2 is NOT in the base distribution 16.04)
-    # So instead we link to '/usr/bin/python3'
-    # (even if there is python2 besides python3, let's use the more recent python3)
     default:  {
       $mypython_target = '/usr/bin/python3'
       $syslog_filepath = '/var/log/syslog'

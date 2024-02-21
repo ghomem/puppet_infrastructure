@@ -8,6 +8,14 @@ node 'nginx-static05' {
   include passwd_common
   include puppet_infrastructure::nginx_base
 
+  file { '/var/www':
+    ensure => directory,
+  }
+
+  file { '/var/www/html':
+    ensure => directory,
+  }
+
   # Hello world index.html
   file { '/var/www/html/index.html':
     mode    => '0644',
