@@ -1,8 +1,9 @@
-define puppet_infrastructure::letsencrypt_certificate_do (
+define puppet_infrastructure::letsencrypt_certificate (
   String  $domain,
-  String  $do_credentials_path,
+  String  $credentials_path = "${lookup('filesystem::etcdir')}/dns-creds.ini",
   String  $certificate_path = '',
   Boolean $include_root = false,
+  Enum['digitalocean', 'hetzner'] $provider,
 ) {
   if ( ! empty($certificate_path) ) {
     $final_certificate_path = $certificate_path
@@ -21,10 +22,16 @@ define puppet_infrastructure::letsencrypt_certificate_do (
     $domain_list = [$domain]
   }
 
+  if $provider == 'digitalocean' {
+    additional_args = ['--dns-digitalocean', "--dns-digitalocean-credentials ${credentials_path}"]
+  } else {
+    additional_args = ['--dns-hetzner', "--dns-hetzner-credentials ${credentials_path}"]
+  }
+
   # the certificates are stored in /etc/letsencrypt/live/${final_certificate_path}
   letsencrypt::certonly { $final_certificate_path:
     domains         => $domain_list,
     custom_plugin   => true,  # removes the -a argument, add the other arguments with additional_args
-    additional_args => ['--dns-digitalocean', "--dns-digitalocean-credentials ${do_credentials_path}"],
+    additional_args => $additional_args,
   }
 }

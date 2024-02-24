@@ -1,7 +1,7 @@
-class puppet_infrastructure::letsencrypt_base_do (
+class puppet_infrastructure::letsencrypt_base (
   String $email,
-  String $do_creds_file,
-  String $do_api_token,
+  String $dns_creds_file              = "${lookup('filesystem::etcdir')}/dns-creds.ini",
+  String $dns_api_token,
   Array[String] $domains,
   Boolean $automate_deployment        = false,
   Integer $renew_cron_hour            = 4,
@@ -9,31 +9,26 @@ class puppet_infrastructure::letsencrypt_base_do (
   Integer $deploy_cron_hour           = 5,
   Integer $deploy_cron_minute         = 0,
   Array[Integer] $renew_cron_monthday = [5,10,15,20,25],
+  Enum['digitalocean', 'hetzner'] $provider,
 ){
 
-  $major_release = $facts['os']['release']['major']
-
-  if $major_release == '16.04' or $major_release == '18.04' {
-    apt::ppa { 'ppa:certbot/certbot': }
-
-    # letsencrypt plugin for DO
-    package { 'letsencrypt DO plugin':
-      name     => 'python3-certbot-dns-digitalocean',
-      ensure   => 'installed',
-      provider => 'apt',
-      require  => Apt::Ppa['ppa:certbot/certbot'],  # ensures it is installed after the PPA is added
-    }
+  if $provider == 'digitalocean' {
+    $name     = 'python3-certbot-dns-digitalocean'
+    $provider = 'apt'
   } else {
-    # letsencrypt plugin for DO
-    package { 'letsencrypt DO plugin':
-      name     => 'python3-certbot-dns-digitalocean',
-      ensure   => 'installed',
-      provider => 'apt',
-    }
+    $name     = 'certbot-dns-hetzner'
+    $provider = 'pip'
   }
 
-  # DO API token file location
-  file { $do_creds_file:
+  # letsencrypt plugin
+  package { 'letsencrypt plugin':
+    name     => $name,
+    ensure   => 'installed',
+    provider => $provider,
+  }
+
+  # dns API token file location
+  file { $dns_creds_file:
     mode      => '600',
     owner     => 'root',
     group     => 'root',
@@ -50,7 +45,7 @@ class puppet_infrastructure::letsencrypt_base_do (
     renew_cron_monthday      => $renew_cron_monthday,
     # reload NGINX (no downtime) after renewing certs
     renew_post_hook_commands => 'service nginx reload',
-    require                  => Package['letsencrypt DO plugin'],
+    require                  => Package['letsencrypt plugin'],
   }
 
 
