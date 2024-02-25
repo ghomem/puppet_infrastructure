@@ -23,9 +23,9 @@ define puppet_infrastructure::letsencrypt_certificate (
   }
 
   if $provider == 'digitalocean' {
-    additional_args = ['--dns-digitalocean', "--dns-digitalocean-credentials ${credentials_path}"]
+    $additional_args = ['--dns-digitalocean', "--dns-digitalocean-credentials ${credentials_path}"]
   } else {
-    additional_args = ['--dns-hetzner', "--dns-hetzner-credentials ${credentials_path}"]
+    $additional_args = ['--dns-hetzner', "--dns-hetzner-credentials ${credentials_path}"]
   }
 
   # the certificates are stored in /etc/letsencrypt/live/${final_certificate_path}
