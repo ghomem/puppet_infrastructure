@@ -13,18 +13,18 @@ class puppet_infrastructure::letsencrypt_base (
 ){
 
   if $provider == 'digitalocean' {
-    $name     = 'python3-certbot-dns-digitalocean'
-    $provider = 'apt'
+    $package_name     = 'python3-certbot-dns-digitalocean'
+    $package_provider = 'apt'
   } else {
-    $name     = 'certbot-dns-hetzner'
-    $provider = 'pip'
+    $package_name     = 'certbot-dns-hetzner'
+    $package_provider = 'pip'
   }
 
   # letsencrypt plugin
   package { 'letsencrypt plugin':
-    name     => $name,
+    name     => $package_name,
     ensure   => 'installed',
-    provider => $provider,
+    provider => $package_provider,
   }
 
   # dns API token file location
