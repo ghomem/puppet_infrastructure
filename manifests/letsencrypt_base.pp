@@ -15,9 +15,11 @@ class puppet_infrastructure::letsencrypt_base (
   if $provider == 'digitalocean' {
     $package_name     = 'python3-certbot-dns-digitalocean'
     $package_provider = 'apt'
+    $api_property_str = 'dns_digitalocean_token'
   } else {
     $package_name     = 'certbot-dns-hetzner'
     $package_provider = 'pip'
+    $api_property_str = 'dns_hetzner_api_token'
   }
 
   # letsencrypt plugin
@@ -33,7 +35,7 @@ class puppet_infrastructure::letsencrypt_base (
     owner     => 'root',
     group     => 'root',
     show_diff => false,
-    content => template('puppet_infrastructure/letsencrypt/do-creds.ini.erb'),
+    content => template('puppet_infrastructure/letsencrypt/dns-creds.ini.erb'),
   }
 
   class { 'letsencrypt':
