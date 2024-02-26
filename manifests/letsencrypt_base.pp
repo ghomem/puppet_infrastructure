@@ -3,7 +3,7 @@ class puppet_infrastructure::letsencrypt_base (
   String $dns_creds_file              = "${lookup('filesystem::etcdir')}/dns-creds.ini",
   String $dns_api_token,
   Array[String] $domains,
-  Boolean $automate_deployment        = false,
+  Boolean $automate_deployment        = true,
   Integer $renew_cron_hour            = 4,
   Integer $renew_cron_minute          = 0,
   Integer $deploy_cron_hour           = 5,
@@ -58,12 +58,12 @@ class puppet_infrastructure::letsencrypt_base (
   $domains_str     = join($domains,' ')
 
   # Script to deploy the certificates
-  file {"${bindir}/deploy_mantained_certificates.sh":
+  file {"${bindir}/deploy_maintained_certificates.sh":
     ensure    => present,
     mode      => '0700',
     owner     => 'root',
     group     => 'root',
-    content   => template('puppet_infrastructure/letsencrypt/deploy_mantained_certificates.sh.erb'),
+    content   => template('puppet_infrastructure/letsencrypt/deploy_maintained_certificates.sh.erb'),
   }
 
   # Cronjob to run the scripts. The cronjob is set to present if the variable $automate_deployment is passed as true. Otherwise it is set to absent.
@@ -73,12 +73,12 @@ class puppet_infrastructure::letsencrypt_base (
     $cron_ensure = 'absent'
   }
 
-  cron { 'deploy_mantained_certificates':
+  cron { 'deploy_maintained_certificates':
     ensure   => $cron_ensure,
     minute   => $deploy_cron_minute,
     hour     => $deploy_cron_hour,
     monthday => $renew_cron_monthday,
     user     => 'root',
-    command  => "${bindir}/deploy_mantained_certificates.sh"
+    command  => "${bindir}/deploy_maintained_certificates.sh"
   }
 }
