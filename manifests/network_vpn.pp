@@ -23,6 +23,7 @@ class puppet_infrastructure::network_vpn (
   $openvpn_pool_start       = '192.168.101.101',
   $openvpn_pool_end         = '192.168.101.200',
   $openvpn_cipher           = 'AES-256-CBC',
+  $openvpn_client_dns       = $openvpn_static_ip,
 ) {
 
     # Caching nameserver for the VPN
@@ -52,7 +53,7 @@ class puppet_infrastructure::network_vpn (
         vpn_pool_end     => $openvpn_pool_end,
         lan_iface        => $openvpn_lan_iface,
         lan_bridge_iface => $openvpn_bridge_iface,
-        push_dns_server  => $openvpn_static_ip,
+        push_dns_server  => $openvpn_client_dns,
         cipher           => $openvpn_cipher,
         reneg_sec        => $openvpn_reneg_sec,
         client_isolation => $client_isolation,
