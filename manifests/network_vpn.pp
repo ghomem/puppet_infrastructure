@@ -10,7 +10,7 @@
 #   puppet://extra_files/openvpn/keys/ca.crt
 #   puppet://extra_files/openvpn/keys/dh2048.pem
 
-class network_vpn (
+class puppet_infrastructure::network_vpn (
   Boolean $client_isolation = true,
   $wan_iface                = 'eth0',
   $openvpn_lan_iface        = 'lo:0',
