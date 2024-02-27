@@ -16,10 +16,19 @@ class puppet_infrastructure::letsencrypt_base (
     $package_name     = 'python3-certbot-dns-digitalocean'
     $package_provider = 'apt'
     $api_property_str = 'dns_digitalocean_token'
+    $required_packages = []
   } else {
     $package_name     = 'certbot-dns-hetzner'
     $package_provider = 'pip'
     $api_property_str = 'dns_hetzner_api_token'
+    $required_packages = ['Package[python3 pip]']
+
+    # python3 pip required for intalling certbot-dns-hetzner
+    package { 'python3 pip':
+      name     => 'python3-pip',
+      ensure   => 'installed',
+      provider => 'apt',
+    }
   }
 
   # letsencrypt plugin
@@ -27,6 +36,7 @@ class puppet_infrastructure::letsencrypt_base (
     name     => $package_name,
     ensure   => 'installed',
     provider => $package_provider,
+    require  => $required_packages,
   }
 
   # dns API token file location
