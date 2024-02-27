@@ -115,6 +115,7 @@ class puppet_infrastructure::openvpn_server (
 
     service { 'openvpn-server@puppet_infrastructure':
         ensure   => 'running',
+        enable   => 'true',
         provider => 'systemd',
     }
 
