@@ -24,12 +24,12 @@ class puppet_infrastructure::packages_base (
   if $os_family == 'Debian' {
     $package_manager = 'apt'
     $nagios_package_name = 'monitoring-plugins-standard'
-    $package_list = ['iptables-persistent', $nagios_package_name, 'ecryptfs-utils', 'vim', 'wget', 'aptitude', 'acl', 'python3-pip']
+    $package_list = ['iptables-persistent', $nagios_package_name, 'ecryptfs-utils', 'vim', 'wget', 'aptitude', 'acl']
   } elsif $os_family == 'RedHat' {
     include puppet_infrastructure::extra_packages_el
     $package_manager = 'dnf'
     $nagios_package_name = 'nagios-plugins-all'
-    $package_list = ['iptables-services', $nagios_package_name, 'vim', 'wget', 'yum-utils', 'acl', 'python3-pip']
+    $package_list = ['iptables-services', $nagios_package_name, 'vim', 'wget', 'yum-utils', 'acl']
   }
 
   # Define a custom exec resource to update the package lists

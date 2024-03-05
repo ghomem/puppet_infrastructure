@@ -30,22 +30,13 @@ class puppet_infrastructure::openvpn_server (
 
 ){
     $major_release = $facts['os']['release']['major']
-    # needed for ed25519 auth client side
-    if $major_release == '20.04' or $major_release == '18.04' {
-        package { 'ifupdown':
-           ensure => present
-        }
 
-        service { 'systemd-networkd.socket systemd-networkd networkd-dispatcher systemd-networkd-wait-online':
-            ensure  => stopped,
-            enable  => false,
-        }
+    package { [ 'ifupdown', 'bridge-utils']: ensure => present }
 
-        # enabling the service, following these instruction
-        # https://askubuntu.com/questions/1031709/ubuntu-18-04-switch-back-to-etc-network-interfaces
-        service { 'networking':
-            enable => true
-        }
+    # enabling the service, following these instruction
+    # https://askubuntu.com/questions/1031709/ubuntu-18-04-switch-back-to-etc-network-interfaces
+    service { 'networking':
+        enable => true
     }
 
     # convert client isolation variable
@@ -54,12 +45,6 @@ class puppet_infrastructure::openvpn_server (
 
     $openvpn_keys_dir = '/etc/openvpn/keys'
     $openvpn_keys_subdir = 'openvpn/keys'
-
-    # install package to create bridge
-    package { 'bridge-utils':
-        ensure => present,
-    }
-
 
     if $force_ifupdown {
         # On some systems, interfaces are internally managed by Netplan and errors occur when restarting
@@ -128,8 +113,10 @@ class puppet_infrastructure::openvpn_server (
                       },
     }
 
-    service { 'openvpn':
-        ensure => 'running',
+    service { 'openvpn-server@puppet_infrastructure':
+        ensure   => 'running',
+        enable   => 'true',
+        provider => 'systemd',
     }
 
     # security files for openvpn server 
@@ -138,7 +125,7 @@ class puppet_infrastructure::openvpn_server (
         owner  => 'root',
         group  => 'root',
         source => "puppet:///extra_files/${openvpn_keys_subdir}/ca.crt",
-        notify => Service['openvpn'],
+        notify => Service['openvpn-server@puppet_infrastructure'],
     }
 
     file {"${openvpn_keys_dir}/dh2048.pem":
@@ -146,7 +133,7 @@ class puppet_infrastructure::openvpn_server (
         owner  => 'root',
         group  => 'root',
         source => "puppet:///extra_files/${openvpn_keys_subdir}/dh2048.pem",
-        notify => Service['openvpn'],
+        notify => Service['openvpn-server@puppet_infrastructure'],
     }
 
     file {"${openvpn_keys_dir}/server.crt":
@@ -154,7 +141,7 @@ class puppet_infrastructure::openvpn_server (
         owner  => 'root',
         group  => 'root',
         source => "puppet:///extra_files/${openvpn_keys_subdir}/server.crt",
-        notify => Service['openvpn'],
+        notify => Service['openvpn-server@puppet_infrastructure'],
     }
 
     file {"${openvpn_keys_dir}/server.key":
@@ -162,17 +149,16 @@ class puppet_infrastructure::openvpn_server (
         owner  => 'root',
         group  => 'root',
         source => "puppet:///extra_files/${openvpn_keys_subdir}/server.key",
-        notify => Service['openvpn'],
+        notify => Service['openvpn-server@puppet_infrastructure'],
     }
 
     # configuration of the openvpn server itself
-    openvpn::server { 'AS':
+    openvpn::server { 'puppet_infrastructure':
         verb                     => '3',
         user                     => 'nobody',
         proto                    => 'udp',
         compression              => 'comp-lzo',
         dev                      => 'tap0',
-        client_cert_not_required => true,
         username_as_common_name  => true,
         pam                      => true,
         persist_key              => true,
@@ -190,23 +176,21 @@ class puppet_infrastructure::openvpn_server (
         tls_auth                 => false,
         require                  => [ File["${openvpn_keys_dir}/ca.crt"], File["${openvpn_keys_dir}/dh2048.pem"], File["${openvpn_keys_dir}/server.crt"], File["${openvpn_keys_dir}/server.key"] ],
         local                    => $local,
-        custom_options           => { 'reneg-sec' => $reneg_sec },
-        notify                   => Service[ 'openvpn' ],
+        custom_options           => { 'reneg-sec' => $reneg_sec, 'verify-client-cert' => 'none' },
+        notify                   => Service['openvpn-server@puppet_infrastructure'],
     }
 
-    if $major_release == '20.04' or $major_release == '18.04' {
-        file { '/usr/lib/openvpn':
-            ensure => directory,
-            mode   => '0744',
-            owner  => 'root',
-            group  => 'root',
-        }
+    file { '/usr/lib/openvpn':
+        ensure => directory,
+        mode   => '0744',
+        owner  => 'root',
+        group  => 'root',
+    }
 
-        file { '/usr/lib/openvpn/openvpn-plugin-auth-pam.so':
-            ensure  => link,
-            target  => '/usr/lib/x86_64-linux-gnu/openvpn/plugins/openvpn-plugin-auth-pam.so',
-            require => [Package['openvpn'], File['/usr/lib/openvpn']],
-        }
+    file { '/usr/lib/openvpn/openvpn-plugin-auth-pam.so':
+        ensure  => link,
+        target  => '/usr/lib/x86_64-linux-gnu/openvpn/plugins/openvpn-plugin-auth-pam.so',
+        require => [Package['openvpn'], File['/usr/lib/openvpn']],
     }
 
     file { '/etc/openvpn/openvpn-up.sh':
