@@ -2,19 +2,11 @@
 # This class provides a nagios plugin that can be used trigger and monitor puppet runs, cpu, memory and zimbra
 class puppet_infrastructure::sysmon_base {
 
-  $major_release = $facts['os']['release']['major']
+  $os_family = $facts['os']['family']
     
-  case $::osfamily {
+  case $os_family {
     'Debian': {
-      # we only support LTS versions and there has been
-      # a package name change from 18.04 to 20.04, hence this verification
-      if $major_release == '16.04' or $major_release == '18.04' {
-        require  puppet_infrastructure::filesystem_lib64
-        $packagename = nagios-plugins-basic
-      }
-      else {
-        $packagename = monitoring-plugins-standard
-      }
+      $packagename = monitoring-plugins-standard
     }
     'RedHat': {
       $packagename = nagios-plugins-disk
@@ -114,7 +106,7 @@ class puppet_infrastructure::sysmon_base {
   owner   => 'root',
   group   => 'root',
   content => template('puppet_infrastructure/sysmon/check_cpu.py.erb'),
-  require => Package[ $packagename ],
+  require => Class['puppet_infrastructure::packages_base'],
   }
 
 # memory
@@ -123,7 +115,7 @@ class puppet_infrastructure::sysmon_base {
   owner   => 'root',
   group   => 'root',
   source  => 'puppet:///modules/puppet_infrastructure/sysmon/check_mem.pl',
-  require => Package[ $packagename ],
+  require => Class['puppet_infrastructure::packages_base'],
   }
 
 # operating system version

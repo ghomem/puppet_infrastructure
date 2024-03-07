@@ -30,6 +30,17 @@ def listusers():
     table = PrettyTable()
     table.field_names = ['username', 'ecryptfs', 'sshkey', 'locked', 'expired', 'email', 'common name', 'company']
 
+    table.sortby = 'username'
+
+    table.align['username']    = 'l'
+    table.align['ecryptfs']    = 'c'
+    table.align['sshkey']      = 'c'
+    table.align['locked']      = 'c'
+    table.align['expired']     = 'c'
+    table.align['email']       = 'l'
+    table.align['common name'] = 'l'
+    table.align['company']     = 'l'
+
     for username in userlist:
         email = getemail(username)
         cname = getcname(username)

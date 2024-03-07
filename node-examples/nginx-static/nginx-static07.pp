@@ -21,6 +21,14 @@ node 'nginx-static07' {
 
   ####################################### Example files and directories ###########################################
 
+  file { '/var/www':
+    ensure => directory,
+  }
+
+  file { '/var/www/html':
+    ensure => directory,
+  }
+
   # Main directory for domain puppetdemo.test
   file { "/var/www/html/${domain}/":
     ensure  => 'directory',
