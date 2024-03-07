@@ -1,5 +1,5 @@
 #!/bin/bash
-# usage example: sudo ./install-puppet-node.sh FQDN DOMAIN MASTER CUSTOMER
+# usage example: sudo ./install-puppet-node.sh FQDN DOMAIN MASTER WAITFORCERT
 
 SWAPFILE=/swapfile
 
@@ -47,7 +47,7 @@ DOMAIN=$2
 NODECONF=/etc/puppetlabs/puppet/puppet.conf
 PUPPETBIN=/opt/puppetlabs/bin/puppet
 MASTER=$3
-CUSTOMER=$4
+WAITFORCERT=$4
 
 #### main ####
 
@@ -97,8 +97,10 @@ else
     systemctl stop puppet
 fi
 
-# Custom customer fact
-mkdir -p /etc/facter/facts.d
-echo "customer=$CUSTOMER" > /etc/facter/facts.d/facts.txt
+if [ -z $WAITFORCERT ]; then
+  EXTRA_ARGS=
+else
+  EXTRA_ARGS="--waitforcert $WAITFORCERT"
+fi
 
-$PUPPETBIN agent --test
+$PUPPETBIN agent --test $EXTRA_ARGS
