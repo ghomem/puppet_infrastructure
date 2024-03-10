@@ -1,4 +1,4 @@
-class puppet_infrastructure::hello_world_web_docker (
+class puppet_infrastructure::hello_world_docker (
   $revision = 'latest',
   $myport = ''
 ) {
