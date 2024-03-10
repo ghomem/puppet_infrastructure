@@ -17,7 +17,7 @@ class puppet_infrastructure::hello_world_docker (
     env                               => [ ],
     ports                             => [ "${myport}:5000" ],
     remove_container_on_stop          => false,
-	  restart_service_on_docker_refresh => true,
+    restart_service_on_docker_refresh => true,
     subscribe                         => Docker::Image[ $img_name ],
   }
 
