@@ -1,4 +1,4 @@
-define docker_container (
+define puppet_infrastructure::docker_container (
   $image,
   $revision = 'latest',
   $myorigin = '',
