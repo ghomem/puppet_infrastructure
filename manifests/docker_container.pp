@@ -26,9 +26,9 @@ define puppet_infrastructure::docker_container (
 
   # Define the port configuration
   if $myport {
-    app_port = ["${myport}:${myport}"]
+    $app_port = ["${myport}:${myport}"]
   } else {
-    app_port = []
+    $app_port = []
   }
 
   docker::run { $container_name:
