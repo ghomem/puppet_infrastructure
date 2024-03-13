@@ -10,14 +10,14 @@ define puppet_infrastructure::docker_container (
   $registry_url = split($image, '/')[0]
   $img_name = $image
 
-  if $username and $token {
+  if $username != '' and $token != '' {
     docker::registry { $registry_url:
       username => $username,
       password => $token,
     }
   }
 
-  if $digest {
+  if $digest != '' {
     docker::image { $img_name:
       ensure    => present,
       image_digest => $digest,
