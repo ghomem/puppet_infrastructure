@@ -6,6 +6,7 @@ define puppet_infrastructure::docker_container (
   $myport = '',
   $username = '',
   $token = '',
+  $env = []
 ) {
   $registry_url = split($image, '/')[0]
   $img_name = $image
@@ -44,7 +45,7 @@ define puppet_infrastructure::docker_container (
   docker::run { $container_name:
     ensure                            => present,
     image                             => $image_id,
-    env                               => [ "MYORIGIN=${myorigin}", "MYPORT=${myport}" ],
+    env                               => $env,
     ports                             => $app_port,
     remove_container_on_stop          => false,
     restart_service_on_docker_refresh => true,
