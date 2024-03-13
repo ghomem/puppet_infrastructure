@@ -1,6 +1,7 @@
 define puppet_infrastructure::docker_container (
   $image,
-  $revision = 'latest',
+  $tag = 'latest',
+  $digest = '',
   $myorigin = '',
   $myport = '',
   $username = '',
@@ -16,9 +17,18 @@ define puppet_infrastructure::docker_container (
     }
   }
 
-  docker::image { $img_name:
-    ensure    => present,
-    image_tag => $revision,
+  if $digest {
+    docker::image { $img_name:
+      ensure    => present,
+      image_digest => $digest,
+    }
+    $image_id = $digest
+  } else {
+    docker::image { $img_name:
+      ensure    => present,
+      image_tag => $tag,
+    }
+    $image_id = $tag
   }
 
   # Define the name for the docker run instance
@@ -33,9 +43,9 @@ define puppet_infrastructure::docker_container (
 
   docker::run { $container_name:
     ensure                            => present,
-    image                             => $img_name,
+    image                             => "${img_name}:${image_id}",
     env                               => [ "MYORIGIN=${myorigin}", "MYPORT=${myport}" ],
-    ports                             => $app_port,
+    ports                             => $app_port},
     remove_container_on_stop          => false,
     restart_service_on_docker_refresh => true,
     subscribe                         => Docker::Image[$img_name],
