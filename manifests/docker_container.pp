@@ -45,7 +45,7 @@ define puppet_infrastructure::docker_container (
     ensure                            => present,
     image                             => "${img_name}:${image_id}",
     env                               => [ "MYORIGIN=${myorigin}", "MYPORT=${myport}" ],
-    ports                             => $app_port},
+    ports                             => $app_port,
     remove_container_on_stop          => false,
     restart_service_on_docker_refresh => true,
     subscribe                         => Docker::Image[$img_name],
