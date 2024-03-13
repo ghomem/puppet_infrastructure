@@ -22,13 +22,13 @@ define puppet_infrastructure::docker_container (
       ensure    => present,
       image_digest => $digest,
     }
-    $image_id = $digest
+    $image_id = "${img_name}@${digest}"
   } else {
     docker::image { $img_name:
       ensure    => present,
       image_tag => $tag,
     }
-    $image_id = $tag
+    $image_id = "${img_name}:${tag}"
   }
 
   # Define the name for the docker run instance
@@ -43,7 +43,7 @@ define puppet_infrastructure::docker_container (
 
   docker::run { $container_name:
     ensure                            => present,
-    image                             => "${img_name}:${image_id}",
+    image                             => $image_id,
     env                               => [ "MYORIGIN=${myorigin}", "MYPORT=${myport}" ],
     ports                             => $app_port,
     remove_container_on_stop          => false,
