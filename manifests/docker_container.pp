@@ -24,13 +24,13 @@ define puppet_infrastructure::docker_container (
     $image_id = "${img_name}@${digest}"
     docker::image { $image_id:
       ensure        => present,
-      $image_digest => $digest,
+      image_digest => $digest,
     }
   } else {
     $image_id = "${img_name}:${tag}"
     docker::image { $image_id:
       ensure     => present,
-      $image_tag => $tag,
+      image_tag => $tag,
     }
   }
 
