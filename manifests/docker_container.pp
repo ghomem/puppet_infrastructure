@@ -21,17 +21,15 @@ define puppet_infrastructure::docker_container (
   }
 
   if $digest != '' {
-    docker::image { $img_name:
-      ensure    => present,
-      image_digest => $digest,
-    }
     $image_id = "${img_name}@${digest}"
-  } else {
-    docker::image { $img_name:
+    docker::image { $image_id:
       ensure    => present,
-      image_tag => $tag,
     }
+  } else {
     $image_id = "${img_name}:${tag}"
+    docker::image { $image_id:
+      ensure    => present,
+    }
   }
 
   # Define the name for the docker run instance
