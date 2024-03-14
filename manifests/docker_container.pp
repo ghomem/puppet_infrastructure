@@ -12,9 +12,11 @@ define puppet_infrastructure::docker_container (
   $img_name = $image
 
   if $username != '' and $token != '' {
-    docker::registry { $registry_url:
-      username => $username,
-      password => $token,
+    if ! defined(Docker::Registry[$registry_url]) {
+      docker::registry { $registry_url:
+        username => $username,
+        password => $token,
+      }
     }
   }
 
