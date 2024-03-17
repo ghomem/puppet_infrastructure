@@ -3,7 +3,7 @@ define puppet_infrastructure::docker_container (
   $tag = 'latest',
   $digest = '',
   $myorigin = '',
-  $myport = '',
+  $port = '',
   $username = '',
   $token = '',
   $network = 'bridge',
@@ -39,8 +39,8 @@ define puppet_infrastructure::docker_container (
   $container_name = $name
 
   # Define the port configuration
-  if $myport {
-    $app_port = ["${myport}:${myport}"]
+  if $port {
+    $app_port = ["${port}:${port}"]
   } else {
     $app_port = []
   }
