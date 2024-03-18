@@ -1,9 +1,10 @@
 define puppet_infrastructure::docker_container (
   $image,
+  $app_port = '',
+  $host_port = '',
   $tag = 'latest',
   $digest = '',
   $myorigin = '',
-  $port = '',
   $username = '',
   $token = '',
   $network = 'bridge',
@@ -11,6 +12,12 @@ define puppet_infrastructure::docker_container (
 ) {
   $registry_url = split($image, '/')[0]
   $img_name = $image
+
+  if $host_port == '' {
+    $myhost_port = $app_port
+  } else {
+    $myhost_port = $host_port
+  }
 
   if $username != '' and $token != '' {
     if ! defined(Docker::Registry[$registry_url]) {
@@ -39,17 +46,17 @@ define puppet_infrastructure::docker_container (
   $container_name = $name
 
   # Define the port configuration
-  if $port {
-    $app_port = ["${port}:${port}"]
+  if $app_port != '' {
+    $myapp_port = ["${myhost_port}:${app_port}"]
   } else {
-    $app_port = []
+    $myapp_port = []
   }
 
   docker::run { $container_name:
     ensure                            => present,
     image                             => $image_id,
     env                               => $env,
-    ports                             => $app_port,
+    ports                             => $myapp_port,
     remove_container_on_stop          => false,
     restart_service_on_docker_refresh => true,
     net                               => $network,
