@@ -38,10 +38,6 @@ perl -pi -e 's/^(Defaults\s*secure_path\s?=\s?\"?[^\"\n]*)(\"?)$/$1:\/opt\/puppe
 
 SETHOSTNAME=yes
 START=no
-UBUNTUREPOPKG=/tmp/puppetlabs-release-puppet5.deb
-RHELREPOPKG=/tmp/puppetlabs-release-puppet5.rpm
-UBUNTUREPOPKGURL=http://apt.puppetlabs.com/puppet5-release-bionic.deb
-RHELREPOPKGURL=https://yum.puppet.com/puppet-release-el-$(rpm -E '%{rhel}').noarch.rpm
 NODENAME=$1
 DOMAIN=$2
 NODECONF=/etc/puppetlabs/puppet/puppet.conf
@@ -68,12 +64,16 @@ fi
 
 # Detect OS and install Puppet 5
 if [ -f /etc/redhat-release ]; then
+    RHELREPOPKGURL=https://yum.puppet.com/puppet-release-el-$(rpm -E '%{rhel}').noarch.rpm
+    RHELREPOPKG=/tmp/puppetlabs-release-puppet5.rpm
     # RHEL/CentOS
     yum install -y wget
     wget -O $RHELREPOPKG $RHELREPOPKGURL
     yum install -y $RHELREPOPKG
     yum install -y puppet-agent
 else
+    UBUNTUREPOPKGURL=http://apt.puppetlabs.com/puppet5-release-bionic.deb
+    UBUNTUREPOPKG=/tmp/puppetlabs-release-puppet5.deb
     # Ubuntu
     apt-get update
     apt-get install -y wget
