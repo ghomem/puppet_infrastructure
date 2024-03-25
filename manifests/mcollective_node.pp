@@ -24,8 +24,8 @@ class puppet_infrastructure::mcollective_node {
   }
 
   service { 'mcollective':
-    ensure   => running,
-    enable   => true,
+    ensure   => stopped,
+    enable   => false,
     provider => 'systemd',
   }
 
