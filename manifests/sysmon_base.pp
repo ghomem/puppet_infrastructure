@@ -10,14 +10,6 @@ class puppet_infrastructure::sysmon_base {
     }
     'RedHat': {
       $packagename = nagios-plugins-disk
-
-      # this fixes the /home/nagios not existing on Centos 7
-
-      file{'/home/nagios':
-        ensure =>  'directory',
-        owner  =>  'nagios',
-        group  =>  'nagios',
-        mode   =>  '0700',
       }
     }
     default: {

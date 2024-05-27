@@ -20,7 +20,7 @@ class puppet_infrastructure::sysmon_puppet_cert_status {
   # along with permission for launching puppet cert health check runs
   sudo::conf { 'check_puppet_cert_health':
     priority => 20,
-    content  => "nagios ALL=NOPASSWD:${localdir}/bin/check_puppet_cert_health.py",
+    content  => "naemon ALL=NOPASSWD:${localdir}/bin/check_puppet_cert_health.py",
   }
 
 }

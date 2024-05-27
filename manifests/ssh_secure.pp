@@ -76,7 +76,7 @@ class puppet_infrastructure::ssh_secure (
       'ClientAliveInterval'     => $client_alive_interval,
       'UsePrivilegeSeparation'  => 'yes' ,
       'X11DisplayOffset'        => '10' ,
-      'AllowGroups'             => "${admin_group} nagios ${othergroups}" ,
+      'AllowGroups'             => "${admin_group} naemon ${othergroups}" ,
     },
   }
 
