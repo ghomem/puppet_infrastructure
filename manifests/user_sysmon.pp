@@ -11,13 +11,6 @@ define puppet_infrastructure::user_sysmon( $myname = 'Dummy Dummier', $myhash = 
   $htpasswd_file = '/etc/thruk/htpasswd'
   htpasswd { $myusername : cryptpasswd => $myhash, target => $htpasswd_file }
 
-  file { '/etc/naemon/conf.d/contacts/':
-    ensure => 'directory',
-    mode   => '0775',
-    owner  => 'naemon',
-    group  => 'naemon',
-  }
-
   file { "/etc/naemon/conf.d/contacts/${myusername}.cfg":
   mode    => '0664',
   owner   => 'naemon',
