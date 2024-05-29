@@ -10,7 +10,6 @@ class puppet_infrastructure::sysmon_base {
     }
     'RedHat': {
       $packagename = nagios-plugins-disk
-      }
     }
     default: {
     }
