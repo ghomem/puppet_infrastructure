@@ -10,6 +10,7 @@ if [ "$1" == "" ]; then
 fi
 
 WARN_COUNT=$1 # Threshold from which we send a WARNING
+SEVERITY=${2:-Critical} # Default severity to Critical if not specified
 
 # Determine the OS type
 if command -v apt >/dev/null 2>&1; then
@@ -39,8 +40,8 @@ elif command -v yum >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1; then
         PKG_MANAGER=dnf
     fi
 
-    # Get the list of packages to upgrade and the number of packages as RESULT
-    LIST=$($PKG_MANAGER check-update --quiet | grep -v '^$' | awk 'NR>1 {print $1}')
+    # Get the list of packages to upgrade and the number of packages as RESULT using --sec-severity option
+    LIST=$($PKG_MANAGER updateinfo list --sec-severity=$SEVERITY | awk 'NR>2 {print $3}')
     RESULT=$(echo "$LIST" | wc -w)
 
 else
