@@ -10,7 +10,7 @@ if [ "$1" == "" ]; then
 fi
 
 WARN_COUNT=$1 # Threshold from which we send a WARNING
-SEVERITY=${2:-Critical} # Default severity to Critical if not specified
+SEVERITY=${2:-Important} # Default severity to Critical if not specified
 
 # Determine the OS type
 if command -v apt >/dev/null 2>&1; then
