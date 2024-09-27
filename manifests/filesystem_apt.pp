@@ -123,7 +123,7 @@ class puppet_infrastructure::filesystem_apt (
       $openscap_pkg = 'libopenscap8'
     }
 
-    package { 'openscap_pkg': ensure => 'installed', }
+    package { '$openscap_pkg': ensure => 'installed', }
 
     # install script to find out packages to update using the oscap scanner
     file { "${localdir}/bin/get-relevant-updates-list":
