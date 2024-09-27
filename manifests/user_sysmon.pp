@@ -8,13 +8,13 @@ define puppet_infrastructure::user_sysmon( $myname = 'Dummy Dummier', $myhash = 
   $myusername = $title
 
   # from module leinaddm-htpasswd
-  $htpasswd_file = '/etc/nagios/passwd'
+  $htpasswd_file = '/etc/thruk/htpasswd'
   htpasswd { $myusername : cryptpasswd => $myhash, target => $htpasswd_file }
 
-  file { "/etc/nagios/okconfig/contacts/${myusername}.cfg":
-  mode    => '0644',
-  owner   => 'nagios',
-  group   => 'nagios',
+  file { "/etc/naemon/conf.d/contacts/${myusername}.cfg":
+  mode    => '0664',
+  owner   => 'naemon',
+  group   => 'naemon',
   content => template('puppet_infrastructure/users/sysmon_contact.erb'),
   }
 
