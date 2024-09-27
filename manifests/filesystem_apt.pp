@@ -113,9 +113,18 @@ class puppet_infrastructure::filesystem_apt (
   } elsif ($relevant_updates_method == 2) {
 
     # install openscap scanner package
-    # NOTE: in the future the /usr/bin/oscap program is going to be provided by the
-    #       'openscap-scanner' package
-    package { 'libopenscap8': ensure => 'installed', }
+    $major_release = $facts['os']['release']['major']
+
+    if $major_release == '24.04' {
+      $openscap_pkg = 'openscap-scanner'
+    }
+    else {
+      # 20.04 and 22.04
+      $openscap_pkg = 'libopenscap8'
+    }
+
+    package { 'openscap_pkg': ensure => 'installed', }
+
     # install script to find out packages to update using the oscap scanner
     file { "${localdir}/bin/get-relevant-updates-list":
     mode    => '0755',
@@ -126,7 +135,7 @@ class puppet_infrastructure::filesystem_apt (
     }
 
     # check if we want kernel updates or not
-    if ($relevant_updates_no_kernel) {
+    if ($relevant_updates_nolibopenscap8_kernel) {
       $apt_check_updates_no_kernel = 1
     } else {
       $apt_check_updates_no_kernel = 0

@@ -80,7 +80,7 @@ else
     wget -O $UBUNTUREPOPKG $UBUNTUREPOPKGURL
     dpkg -i $UBUNTUREPOPKG
     apt-get update
-    apt-get install -y puppet-agent
+    apt-get install -t bionic -y puppet-agent
 fi
 
 # configurations and start puppet service
