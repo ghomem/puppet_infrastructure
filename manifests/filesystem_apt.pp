@@ -135,7 +135,7 @@ class puppet_infrastructure::filesystem_apt (
     }
 
     # check if we want kernel updates or not
-    if ($relevant_updates_nolibopenscap8_kernel) {
+    if ($relevant_updates_no_kernel) {
       $apt_check_updates_no_kernel = 1
     } else {
       $apt_check_updates_no_kernel = 0
