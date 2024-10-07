@@ -25,14 +25,27 @@ NO_KERNEL="<%= @apt_check_updates_no_kernel %>"
 
 # function to print correct usage
 print_usage () {
-  echo "usage: apt-check-updates.sh PRIOTHRESHOLD"
+  echo "usage: apt-check-updates.sh PRIOTHRESHOLD [TERMOUTPUT]"
   echo "PRIOTHRESHOLD = {Critical,High,Medium,Low,Negligible}"
+  echo "TERMOUTPUT    = {True,False}"
   exit $E_ERR
 }
 
 # validate parameter
 if [ -z "$1" ]; then
   print_usage
+fi
+
+TERMOUTPUT="$2"
+if [ ! -z $TERMOUTPUT ]; then
+  if [ $TERMOUTPUT = "True" ]; then
+    PKGSFILE="/tmp/apt-check-updates.out"
+    PRINT_RESULT=1
+  else
+    if [ $TERMOUTPUT != "False" ]; then
+      print_usage
+    fi
+  fi
 fi
 
 # validate the priority string
@@ -99,3 +112,8 @@ if [ $DEBUG -eq 1 ]; then
   echo $COMMAND
 fi
 $COMMAND
+
+if [ ! -z $PRINT_RESULT ]; then
+  cat $PKGSFILE
+  rm -f $PKGSFILE # in this case it is a file on /tmp
+fi
