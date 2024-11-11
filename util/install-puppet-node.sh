@@ -170,7 +170,10 @@ while true; do
         elif grep -q "Exiting; no certificate found and waitforcert is disabled" /tmp/puppet_agent_output; then
             log_warn "Certificate request pending. Waiting for certificate to be signed on Puppet server..."
             sleep 5
-        fi
+        else
+            log_warn "Puppet agent ran successfully."
+	    break
+	fi
     fi
 done
 
