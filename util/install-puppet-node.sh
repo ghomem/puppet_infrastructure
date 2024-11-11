@@ -13,14 +13,10 @@ while [ $# -gt 0 ]; do
             shift
             break
             ;;
-        -*)
-            echo "Unknown option: $1"
-            exit 1
-            ;;
-        *)
-            # Non-option argument
-            break
-            ;;
+            *)
+                # Non-option argument
+                break
+                ;;
     esac
     shift
 done
@@ -48,7 +44,7 @@ run_cmd() {
     if [ "$DEBUG" -eq 1 ]; then
         "$@"
     else
-        "$@" > /dev/null 2>&1
+        "$@" >/dev/null 2>&1
     fi
 }
 
@@ -64,7 +60,7 @@ if [ -z "$(swapon --show)" ]; then
         run_cmd chmod 600 $SWAPFILE
         run_cmd /sbin/swapon $SWAPFILE
         run_cmd cp -f /etc/fstab /etc/fstab.orig
-        grep $SWAPFILE /etc/fstab || echo "$SWAPFILE  swap  swap  defaults  0  0" >> /etc/fstab
+        grep $SWAPFILE /etc/fstab || echo "$SWAPFILE  swap  swap  defaults  0  0" >>/etc/fstab
     else
         log_info "Swap is not in use, but the system is not a container. Skipping swap creation."
     fi
@@ -74,10 +70,10 @@ fi
 
 log_info "Disabling cloud-init and setting MTU to 1500..."
 run_cmd touch /etc/cloud/cloud-init.disabled
-echo "supersede interface-mtu 1500;" >> /etc/dhcp/dhclient.conf
+echo "supersede interface-mtu 1500;" >>/etc/dhcp/dhclient.conf
 
 log_info "Checking if Perl is installed..."
-if ! command -v perl &> /dev/null; then
+if ! command -v perl &>/dev/null; then
     log_info "Perl is not installed. Installing Perl..."
     if [ -f /etc/redhat-release ]; then
         # For RHEL/CentOS
@@ -93,7 +89,7 @@ fi
 
 log_info "Modifying /etc/sudoers to fix sudo path..."
 run_cmd cp -f /etc/sudoers /etc/sudoers.orig
-run_cmd perl -pi -e 's/^(Defaults\s*secure_path\s?=\s?\"?[^\"\n]*)(\"?)$/$1:\/opt\/puppetlabs\/bin$2/' /etc/sudoers
+run_cmd perl -pi -e 's#^(Defaults\s*secure_path\s?=\s?"?[^"\n]*)(?"?)$#$1:/opt/puppetlabs/bin$2#' /etc/sudoers
 
 SETHOSTNAME=yes
 START=no
@@ -107,13 +103,13 @@ PUPPETBIN=/opt/puppetlabs/bin/puppet
 if [ "x$SETHOSTNAME" = "xyes" ]; then
     log_info "Setting hostname to $NODENAME..."
     run_cmd hostnamectl set-hostname $NODENAME
-    grep "$NODENAME" /etc/hosts || echo "127.0.0.1 ${NODENAME}.${DOMAIN} ${NODENAME}" >> /etc/hosts
+    grep -q "$NODENAME" /etc/hosts || echo "127.0.0.1 ${NODENAME}.${DOMAIN} ${NODENAME}" >>/etc/hosts
 fi
 
 log_info "Detecting operating system..."
 if [ -f /etc/redhat-release ]; then
     log_info "Detected RHEL/CentOS. Installing Puppet agent..."
-    RHELREPOPKGURL=https://yum.puppet.com/puppet-release-el-$(rpm -E '%{rhel}').noarch.rpm
+    RHELREPOPKGURL="https://yum.puppet.com/puppet-release-el-$(rpm -E '%{rhel}').noarch.rpm"
     RHELREPOPKG=/tmp/puppetlabs-release-puppet5.rpm
     run_cmd yum install -y wget
     run_cmd wget -O $RHELREPOPKG $RHELREPOPKGURL
@@ -128,12 +124,22 @@ else
     run_cmd wget -O $UBUNTUREPOPKG $UBUNTUREPOPKGURL
     run_cmd dpkg -i $UBUNTUREPOPKG
     run_cmd apt-get update
-    run_cmd apt-get install -t bionic -y puppet-agent
+    run_cmd apt-get install -y puppet-agent
 fi
 
 log_info "Configuring Puppet agent..."
 run_cmd cp -f $NODECONF ${NODECONF}.orig
-echo -e "[main]\nserver=${MASTER}\nnode_name=cert\ncertname=${NODENAME}\nlogdir=/var/log/puppet\nvardir=/var/lib/puppet\nssldir=/var/lib/puppet/ssl\nrundir=/var/run/puppet\nfactpath=\$vardir/lib/facter" > /etc/puppetlabs/puppet/puppet.conf
+cat <<EOF >/etc/puppetlabs/puppet/puppet.conf
+[main]
+server=${MASTER}
+node_name=cert
+certname=${NODENAME}
+logdir=/var/log/puppet
+vardir=/var/lib/puppet
+ssldir=/var/lib/puppet/ssl
+rundir=/var/run/puppet
+factpath=\$vardir/lib/facter
+EOF
 
 log_info "Ensuring Puppet service is running..."
 run_cmd $PUPPETBIN resource service puppet ensure=running enable=true provider=systemd
@@ -148,34 +154,27 @@ else
     run_cmd systemctl stop puppet
 fi
 
-log_info "Submitting certificate signing request to Puppet server..."
+log_info "Running Puppet agent to generate certificate request..."
 
-if [ "$DEBUG" -eq 1 ]; then
-    $PUPPETBIN ssl submit_request
-else
-    $PUPPETBIN ssl submit_request > /dev/null 2>&1
-fi
-
-log_info "Waiting for certificate to be signed on Puppet server..."
-
-CERTIFICATE_SIGNED=0
-
-while [ $CERTIFICATE_SIGNED -eq 0 ]; do
-    if $PUPPETBIN ssl verify > /dev/null 2>&1; then
-        CERTIFICATE_SIGNED=1
-        log_info "Certificate signed."
+while true; do
+    if $PUPPETBIN agent --test --waitforcert 0 >/tmp/puppet_agent_output 2>&1; then
+        log_info "Puppet agent ran successfully."
+        break
     else
-        log_warn "Waiting for certificate to be signed on Puppet server..."
-        sleep 5
+        if grep -q "Could not request certificate" /tmp/puppet_agent_output; then
+            log_error "Error requesting certificate. Check network connectivity and Puppet server availability."
+            exit 1
+        elif grep -q "no certificate found and waitforcert is disabled" /tmp/puppet_agent_output; then
+            log_warn "Certificate request submitted. Waiting for certificate to be signed on Puppet server..."
+            sleep 5
+        elif grep -q "Exiting; no certificate found and waitforcert is disabled" /tmp/puppet_agent_output; then
+            log_warn "Certificate request pending. Waiting for certificate to be signed on Puppet server..."
+            sleep 5
+        else
+            log_warn "Waiting for certificate to be signed on Puppet server..."
+            sleep 5
+        fi
     fi
 done
-
-log_info "Running Puppet agent..."
-
-if [ "$DEBUG" -eq 1 ]; then
-    $PUPPETBIN agent --test
-else
-    $PUPPETBIN agent --test > /dev/null 2>&1
-fi
 
 log_info "Puppet agent setup completed successfully."
