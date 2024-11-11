@@ -89,7 +89,7 @@ fi
 
 log_info "Modifying /etc/sudoers to fix sudo path..."
 run_cmd cp -f /etc/sudoers /etc/sudoers.orig
-run_cmd perl -pi -e 's#^(Defaults\s*secure_path\s?=\s?"?[^"\n]*)(?"?)$#$1:/opt/puppetlabs/bin$2#' /etc/sudoers
+run_cmd perl -pi -e 's/^(Defaults\s*secure_path\s?=\s?\"?[^\"\n]*)(\"?)$/$1:\/opt\/puppetlabs\/bin$2/' /etc/sudoers
 
 SETHOSTNAME=yes
 START=no
