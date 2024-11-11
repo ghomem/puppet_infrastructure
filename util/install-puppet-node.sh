@@ -100,7 +100,7 @@ START=no
 NODENAME=$1
 DOMAIN=$2
 MASTER=${3:-puppet.$DOMAIN}
-WAITFORCERT=$4
+WAITFORCERT=${4:-10}
 NODECONF=/etc/puppetlabs/puppet/puppet.conf
 PUPPETBIN=/opt/puppetlabs/bin/puppet
 
@@ -148,13 +148,34 @@ else
     run_cmd systemctl stop puppet
 fi
 
-if [ -z "$WAITFORCERT" ]; then
-  EXTRA_ARGS=
+log_info "Submitting certificate signing request to Puppet server..."
+
+if [ "$DEBUG" -eq 1 ]; then
+    $PUPPETBIN ssl submit_request
 else
-  EXTRA_ARGS="--waitforcert $WAITFORCERT"
+    $PUPPETBIN ssl submit_request > /dev/null 2>&1
 fi
 
-log_info "Running Puppet agent test..."
-run_cmd $PUPPETBIN agent --test $EXTRA_ARGS
+log_info "Waiting for certificate to be signed on Puppet server..."
+
+CERTIFICATE_SIGNED=0
+
+while [ $CERTIFICATE_SIGNED -eq 0 ]; do
+    if $PUPPETBIN ssl verify > /dev/null 2>&1; then
+        CERTIFICATE_SIGNED=1
+        log_info "Certificate signed."
+    else
+        log_warn "Waiting for certificate to be signed on Puppet server..."
+        sleep 5
+    fi
+done
+
+log_info "Running Puppet agent..."
+
+if [ "$DEBUG" -eq 1 ]; then
+    $PUPPETBIN agent --test
+else
+    $PUPPETBIN agent --test > /dev/null 2>&1
+fi
 
 log_info "Puppet agent setup completed successfully."
