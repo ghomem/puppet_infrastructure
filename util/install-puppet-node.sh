@@ -1,135 +1,169 @@
 #!/bin/bash
-# usage example: sudo ./install-puppet-node.sh [--debug] NODENAME DOMAIN [MASTER] [WAITFORCERT]
 
-DEBUG=0
+# Function definitions
+
+function print_usage ()
+{
+  echo "Usage: $0 [--debug] NODENAME DOMAIN [MASTER] [WAITFORCERT]"
+}
+
+function handle_error () {
+    rc=$1
+    err_message=$2
+
+    if [ "0" != "$rc" ]; then
+        print_error "$err_message"
+        exit $rc
+    fi
+}
+
+function print_status () {
+    local message=$1
+    echo -e "\033[1;32m$message\033[0m"
+}
+
+function print_error () {
+    local message=$1
+    echo -e "\033[1;31m$message\033[0m"
+}
+
+function print_debug () {
+    if [ "$DEBUG" = "yes" ]; then
+        echo -e "$1"
+    fi
+}
+
+function run_cmd () {
+    local cmd="$1"
+    local err_message="$2"
+    if [ "$DEBUG" = "yes" ]; then
+        eval $cmd
+    else
+        eval $cmd > /dev/null 2>&1
+    fi
+    handle_error $? "$err_message"
+}
+
+# Initialize DEBUG to no
+DEBUG=no
 
 # Process options
-while [ $# -gt 0 ]; do
-    case "$1" in
-        --debug)
-            DEBUG=1
-            ;;
-        --)
-            shift
-            break
-            ;;
-            *)
-                # Non-option argument
-                break
-                ;;
+while [ "$1" != "" ]; do
+    case $1 in
+        --debug )           DEBUG=yes
+                            ;;
+        -h | --help )       print_usage
+                            exit
+                            ;;
+        * )                 break
+                            ;;
     esac
     shift
 done
 
-if [ $# -lt 2 ]; then
-    echo "Usage: $0 [--debug] NODENAME DOMAIN [MASTER] [WAITFORCERT]"
+# Assign positional arguments
+NODENAME=$1
+DOMAIN=$2
+MASTER=$3
+WAITFORCERT=$4
+
+if [ -z "$NODENAME" ] || [ -z "$DOMAIN" ]; then
+    print_error "NODENAME and DOMAIN are required."
+    print_usage
     exit 1
 fi
 
-# Define logging functions with color
-function log_info {
-    echo -e "\033[1;32m$@\033[0m"
-}
-
-function log_warn {
-    echo -e "\033[1;33m$@\033[0m"
-}
-
-function log_error {
-    echo -e "\033[1;31m$@\033[0m"
-}
-
-# Function to run commands with optional debug output
-run_cmd() {
-    if [ "$DEBUG" -eq 1 ]; then
-        "$@"
-    else
-        "$@" >/dev/null 2>&1
-    fi
-}
-
-SWAPFILE=/swapfile
-
-log_info "Checking if swap is already in use..."
-if [ -z "$(swapon --show)" ]; then
-    if grep -q 'container' /proc/1/environ; then
-        log_info "No swap detected. Creating swap file at $SWAPFILE..."
-        # Create and configure swap file
-        run_cmd /bin/dd if=/dev/zero of=$SWAPFILE bs=1M count=1024
-        run_cmd /sbin/mkswap $SWAPFILE
-        run_cmd chmod 600 $SWAPFILE
-        run_cmd /sbin/swapon $SWAPFILE
-        run_cmd cp -f /etc/fstab /etc/fstab.orig
-        grep $SWAPFILE /etc/fstab || echo "$SWAPFILE  swap  swap  defaults  0  0" >>/etc/fstab
-    else
-        log_info "Swap is not in use, but the system is not a container. Skipping swap creation."
-    fi
-else
-    log_info "Swap is already in use."
+if [ -z "$MASTER" ]; then
+    MASTER=puppet.$DOMAIN
 fi
-
-log_info "Disabling cloud-init and setting MTU to 1500..."
-run_cmd touch /etc/cloud/cloud-init.disabled
-echo "supersede interface-mtu 1500;" >>/etc/dhcp/dhclient.conf
-
-log_info "Checking if Perl is installed..."
-if ! command -v perl &>/dev/null; then
-    log_info "Perl is not installed. Installing Perl..."
-    if [ -f /etc/redhat-release ]; then
-        # For RHEL/CentOS
-        run_cmd yum install -y perl
-    else
-        # For Debian/Ubuntu
-        run_cmd apt-get update
-        run_cmd apt-get install -y perl
-    fi
-else
-    log_info "Perl is already installed."
-fi
-
-log_info "Modifying /etc/sudoers to fix sudo path..."
-run_cmd cp -f /etc/sudoers /etc/sudoers.orig
-run_cmd perl -pi -e 's/^(Defaults\s*secure_path\s?=\s?\"?[^\"\n]*)(\"?)$/$1:\/opt\/puppetlabs\/bin$2/' /etc/sudoers
 
 SETHOSTNAME=yes
 START=no
-NODENAME=$1
-DOMAIN=$2
-MASTER=${3:-puppet.$DOMAIN}
-WAITFORCERT=${4:-10}
 NODECONF=/etc/puppetlabs/puppet/puppet.conf
 PUPPETBIN=/opt/puppetlabs/bin/puppet
+SWAPFILE=/swapfile
+
+print_status "Checking if swap is already in use..."
+
+if [ -z "$(swapon --show)" ]; then
+    if [ -n "$(grep container /proc/1/environ)" ]; then
+        print_status "No swap detected and running inside a container. Creating swap file..."
+
+        run_cmd "/bin/dd if=/dev/zero of=$SWAPFILE bs=1M count=1024" "Failed to create swap file"
+        run_cmd "/sbin/mkswap $SWAPFILE" "Failed to set up swap file"
+        run_cmd "chmod 600 $SWAPFILE" "Failed to set permissions on swap file"
+        run_cmd "/sbin/swapon $SWAPFILE" "Failed to enable swap file"
+
+        run_cmd "cp -f /etc/fstab /etc/fstab.orig" "Failed to backup /etc/fstab"
+        grep $SWAPFILE /etc/fstab > /dev/null 2>&1 || echo "$SWAPFILE  swap  swap  defaults  0  0" >> /etc/fstab
+        handle_error $? "Failed to update /etc/fstab"
+    else
+        print_status "No swap detected but not inside a container. Skipping swap file creation."
+    fi
+else
+    print_status "Swap is already in use."
+fi
+
+print_status "Disabling cloud-init and setting MTU to 1500..."
+
+run_cmd "touch /etc/cloud/cloud-init.disabled" "Failed to disable cloud-init"
+echo "supersede interface-mtu 1500;" >> /etc/dhcp/dhclient.conf
+handle_error $? "Failed to set MTU in dhclient.conf"
+
+if ! command -v perl &> /dev/null; then
+    print_status "Perl could not be found. Installing Perl..."
+    if [ -f /etc/redhat-release ]; then
+        # For RHEL/CentOS
+        run_cmd "yum install -y perl" "Failed to install Perl"
+    else
+        # For Debian/Ubuntu
+        run_cmd "apt-get update" "Failed to update apt-get"
+        run_cmd "apt-get install -y perl" "Failed to install Perl"
+    fi
+else
+    print_status "Perl is already installed."
+fi
+
+print_status "Backing up /etc/sudoers and fixing secure_path..."
+
+run_cmd "cp -f /etc/sudoers /etc/sudoers.orig" "Failed to backup /etc/sudoers"
+run_cmd "perl -pi -e 's/^(Defaults\s*secure_path\s?=\s?\"?[^\"\n]*)(\"?)\$/$1:\/opt\/puppetlabs\/bin\$2/' /etc/sudoers" "Failed to fix sudo secure_path"
 
 if [ "x$SETHOSTNAME" = "xyes" ]; then
-    log_info "Setting hostname to $NODENAME..."
-    run_cmd hostnamectl set-hostname $NODENAME
-    grep -q "$NODENAME" /etc/hosts || echo "127.0.0.1 ${NODENAME}.${DOMAIN} ${NODENAME}" >>/etc/hosts
+    print_status "Setting hostname to $NODENAME..."
+
+    run_cmd "hostnamectl set-hostname $NODENAME" "Failed to set hostname"
+    grep "$NODENAME" /etc/hosts > /dev/null 2>&1 || echo "127.0.0.1 ${NODENAME}.${DOMAIN} ${NODENAME}" >> /etc/hosts
+    handle_error $? "Failed to update /etc/hosts"
 fi
 
-log_info "Detecting operating system..."
+print_status "Detecting OS and installing Puppet agent..."
+
 if [ -f /etc/redhat-release ]; then
-    log_info "Detected RHEL/CentOS. Installing Puppet agent..."
-    RHELREPOPKGURL="https://yum.puppet.com/puppet-release-el-$(rpm -E '%{rhel}').noarch.rpm"
+    RHELREPOPKGURL=https://yum.puppet.com/puppet-release-el-$(rpm -E '%{rhel}').noarch.rpm
     RHELREPOPKG=/tmp/puppetlabs-release-puppet5.rpm
-    run_cmd yum install -y wget
-    run_cmd wget -O $RHELREPOPKG $RHELREPOPKGURL
-    run_cmd yum install -y $RHELREPOPKG
-    run_cmd yum install -y puppet-agent
+    # RHEL/CentOS
+    run_cmd "yum install -y wget" "Failed to install wget"
+    run_cmd "wget -O $RHELREPOPKG $RHELREPOPKGURL" "Failed to download Puppet repo package"
+    run_cmd "yum install -y $RHELREPOPKG" "Failed to install Puppet repo package"
+    run_cmd "yum install -y puppet-agent" "Failed to install Puppet agent"
 else
-    log_info "Detected Ubuntu/Debian. Installing Puppet agent..."
     UBUNTUREPOPKGURL=http://apt.puppetlabs.com/puppet5-release-bionic.deb
     UBUNTUREPOPKG=/tmp/puppetlabs-release-puppet5.deb
-    run_cmd apt-get update
-    run_cmd apt-get install -y wget
-    run_cmd wget -O $UBUNTUREPOPKG $UBUNTUREPOPKGURL
-    run_cmd dpkg -i $UBUNTUREPOPKG
-    run_cmd apt-get update
-    run_cmd apt-get install -y puppet-agent
+    # Ubuntu
+    run_cmd "apt-get update" "Failed to update apt-get"
+    run_cmd "apt-get install -y wget" "Failed to install wget"
+    run_cmd "wget -O $UBUNTUREPOPKG $UBUNTUREPOPKGURL" "Failed to download Puppet repo package"
+    run_cmd "dpkg -i $UBUNTUREPOPKG" "Failed to install Puppet repo package"
+    run_cmd "apt-get update" "Failed to update apt-get after installing Puppet repo"
+    run_cmd "apt-get install -t bionic -y puppet-agent" "Failed to install Puppet agent"
 fi
 
-log_info "Configuring Puppet agent..."
-run_cmd cp -f $NODECONF ${NODECONF}.orig
-cat <<EOF >/etc/puppetlabs/puppet/puppet.conf
+print_status "Configuring Puppet agent..."
+
+run_cmd "cp -f $NODECONF ${NODECONF}.orig" "Failed to backup puppet.conf"
+
+cat > /etc/puppetlabs/puppet/puppet.conf <<EOL
 [main]
 server=${MASTER}
 node_name=cert
@@ -139,42 +173,45 @@ vardir=/var/lib/puppet
 ssldir=/var/lib/puppet/ssl
 rundir=/var/run/puppet
 factpath=\$vardir/lib/facter
-EOF
+EOL
+handle_error $? "Failed to create puppet.conf"
 
-log_info "Ensuring Puppet service is running..."
-run_cmd $PUPPETBIN resource service puppet ensure=running enable=true provider=systemd
+print_status "Starting Puppet service..."
+
+run_cmd "$PUPPETBIN resource service puppet ensure=running enable=true provider=systemd" "Failed to start Puppet service"
 
 if [ "x$START" = "xyes" ]; then
-    log_info "Enabling and starting Puppet service..."
-    run_cmd systemctl enable puppet
-    run_cmd systemctl start puppet
+    run_cmd "systemctl enable puppet" "Failed to enable Puppet service"
+    run_cmd "systemctl start puppet" "Failed to start Puppet service"
 else
-    log_info "Disabling and stopping Puppet service..."
-    run_cmd systemctl disable puppet
-    run_cmd systemctl stop puppet
+    run_cmd "systemctl disable puppet" "Failed to disable Puppet service"
+    run_cmd "systemctl stop puppet" "Failed to stop Puppet service"
 fi
 
-log_info "Running Puppet agent to generate certificate request..."
+if [ -z $WAITFORCERT ]; then
+  WAITFORCERT=10
+fi
 
-while true; do
-    if $PUPPETBIN agent --test --waitforcert 0 >/tmp/puppet_agent_output 2>&1; then
-        log_info "Puppet agent ran successfully."
-        break
+EXTRA_ARGS="--waitforcert $WAITFORCERT"
+
+CERT_SIGNED=no
+
+while [ "$CERT_SIGNED" = "no" ]; do
+    print_status "Requesting certificate from Puppet master..."
+    if [ "$DEBUG" = "yes" ]; then
+        OUTPUT=$($PUPPETBIN agent --test $EXTRA_ARGS 2>&1)
     else
-        if grep -q "Could not request certificate" /tmp/puppet_agent_output; then
-            log_error "Error requesting certificate. Check network connectivity and Puppet server availability."
-            exit 1
-        elif grep -q "no certificate found and waitforcert is disabled" /tmp/puppet_agent_output; then
-            log_warn "Certificate request submitted. Waiting for certificate to be signed on Puppet server..."
-            sleep 5
-        elif grep -q "Exiting; no certificate found and waitforcert is disabled" /tmp/puppet_agent_output; then
-            log_warn "Certificate request pending. Waiting for certificate to be signed on Puppet server..."
-            sleep 5
-        else
-            log_warn "Puppet agent ran successfully."
-	    break
-	fi
+        OUTPUT=$($PUPPETBIN agent --test $EXTRA_ARGS > /dev/null 2>&1)
+    fi
+    rc=$?
+    if [ $rc -eq 0 ]; then
+        CERT_SIGNED=yes
+        print_status "Certificate signed. Puppet agent execution has started."
+    else
+        print_status "Certificate request is pending. Waiting for it to be signed..."
+        sleep 5
     fi
 done
 
-log_info "Puppet agent setup completed successfully."
+print_status "Puppet node setup completed successfully."
+
