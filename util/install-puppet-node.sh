@@ -230,7 +230,7 @@ rc=$?
 if [ $rc -eq 0 ] || [ $rc -eq 2 ] || [ $rc -eq 4 ] || [ $rc -eq 6 ]; then
     print_status "Puppet agent execution has completed."
 else
-    print_error "Puppet agent failed with exit code $rc"
+    print_error "Puppet agent failed with exit code $rc. Try to run it manually for more details with 'sudo puppet agent -t'"
     exit $rc
 fi
 
