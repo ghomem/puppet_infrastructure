@@ -127,7 +127,7 @@ fi
 print_status "Backing up /etc/sudoers and fixing secure_path..."
 
 run_cmd "cp -f /etc/sudoers /etc/sudoers.orig" "Failed to backup /etc/sudoers"
-run_cmd "perl -pi -e 's/^(Defaults\s*secure_path\s?=\s?\"?[^\"\n]*)(\"?)\$/$1:\/opt\/puppetlabs\/bin\$2/' /etc/sudoers" "Failed to fix sudo secure_path"
+perl -pi -e 's/^(Defaults\s*secure_path\s?=\s?\"?[^\"\n]*)(\"?)$/$1:\/opt\/puppetlabs\/bin$2/' /etc/sudoers
 
 if [ "x$SETHOSTNAME" = "xyes" ]; then
     print_status "Setting hostname to $NODENAME..."
