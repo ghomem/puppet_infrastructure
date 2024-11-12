@@ -33,6 +33,11 @@ function print_debug () {
     fi
 }
 
+function print_warning () {
+    local message=$1
+    echo -e "\033[1;33m$message\033[0m"
+}
+
 function run_cmd () {
     local cmd="$1"
     local err_message="$2"
@@ -212,7 +217,7 @@ while [ "$CERT_SIGNED" = "no" ]; do
         CERT_SIGNED=yes
         print_status "Certificate has been signed."
     else
-        print_status "Certificate request is pending. Waiting for it to be signed..."
+        print_warning "Certificate request is pending. Waiting for it to be signed..."
         sleep 5
     fi
 done
