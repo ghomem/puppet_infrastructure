@@ -127,7 +127,7 @@ fi
 print_status "Backing up /etc/sudoers and fixing secure_path..."
 
 run_cmd "cp -f /etc/sudoers /etc/sudoers.orig" "Failed to backup /etc/sudoers"
-perl -pi -e 's/^(Defaults\s*secure_path\s?=\s?\"?[^\"\n]*)(\"?)$/$1:\/opt\/puppetlabs\/bin$2/' /etc/sudoers
+run_cmd "perl -pi -e 's/^(Defaults\s*secure_path\s?=\s?\"?[^\"\n]*)(\"?)\$/$1:\/opt\/puppetlabs\/bin\$2/' /etc/sudoers" "Failed to fix sudo secure_path"
 
 if [ "x$SETHOSTNAME" = "xyes" ]; then
     print_status "Setting hostname to $NODENAME..."
@@ -197,6 +197,10 @@ EXTRA_ARGS="--waitforcert $WAITFORCERT"
 print_status "Requesting certificate from Puppet master..."
 
 CERT_SIGNED=no
+CERTFILE="/var/lib/puppet/ssl/certs/${NODENAME}.pem"
+
+# Remove any existing SSL certificates to ensure a fresh start
+rm -rf /var/lib/puppet/ssl
 
 while [ "$CERT_SIGNED" = "no" ]; do
     if [ "$DEBUG" = "yes" ]; then
@@ -204,17 +208,30 @@ while [ "$CERT_SIGNED" = "no" ]; do
     else
         $PUPPETBIN agent --test $EXTRA_ARGS > /dev/null 2>&1
     fi
-    rc=$?
-    if [ $rc -eq 0 ] || [ $rc -eq 2 ]; then
+    if [ -f "$CERTFILE" ]; then
         CERT_SIGNED=yes
-        print_status "Puppet agent execution has started."
-    elif [ $rc -eq 1 ]; then
+        print_status "Certificate has been signed."
+    else
         print_status "Certificate request is pending. Waiting for it to be signed..."
         sleep 5
-    else
-        print_error "Puppet agent failed with exit code $rc"
-        exit $rc
     fi
 done
+
+print_status "Running Puppet agent for the first time..."
+
+if [ "$DEBUG" = "yes" ]; then
+    $PUPPETBIN agent --test
+else
+    $PUPPETBIN agent --test > /dev/null 2>&1
+fi
+
+rc=$?
+
+if [ $rc -eq 0 ] || [ $rc -eq 2 ] || [ $rc -eq 4 ] || [ $rc -eq 6 ]; then
+    print_status "Puppet agent execution has completed."
+else
+    print_error "Puppet agent failed with exit code $rc"
+    exit $rc
+fi
 
 print_status "Puppet node setup completed successfully."
