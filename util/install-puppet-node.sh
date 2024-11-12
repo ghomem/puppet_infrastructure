@@ -86,7 +86,7 @@ SWAPFILE=/swapfile
 print_status "Checking if swap is already in use..."
 
 if [ -z "$(swapon --show)" ]; then
-    if [ -n "$(grep container /proc/1/environ)" ]; then
+    if grep -q container /proc/1/environ; then
         print_status "No swap detected and running inside a container. Creating swap file..."
 
         run_cmd "/bin/dd if=/dev/zero of=$SWAPFILE bs=1M count=1024" "Failed to create swap file"
@@ -188,30 +188,33 @@ else
     run_cmd "systemctl stop puppet" "Failed to stop Puppet service"
 fi
 
-if [ -z $WAITFORCERT ]; then
-  WAITFORCERT=10
+if [ -z "$WAITFORCERT" ]; then
+    WAITFORCERT=10
 fi
 
 EXTRA_ARGS="--waitforcert $WAITFORCERT"
 
+print_status "Requesting certificate from Puppet master..."
+
 CERT_SIGNED=no
 
 while [ "$CERT_SIGNED" = "no" ]; do
-    print_status "Requesting certificate from Puppet master..."
     if [ "$DEBUG" = "yes" ]; then
-        OUTPUT=$($PUPPETBIN agent --test $EXTRA_ARGS 2>&1)
+        $PUPPETBIN agent --test $EXTRA_ARGS
     else
-        OUTPUT=$($PUPPETBIN agent --test $EXTRA_ARGS > /dev/null 2>&1)
+        $PUPPETBIN agent --test $EXTRA_ARGS > /dev/null 2>&1
     fi
     rc=$?
-    if [ $rc -eq 0 ]; then
+    if [ $rc -eq 0 ] || [ $rc -eq 2 ]; then
         CERT_SIGNED=yes
-        print_status "Certificate signed. Puppet agent execution has started."
-    else
+        print_status "Puppet agent execution has started."
+    elif [ $rc -eq 1 ]; then
         print_status "Certificate request is pending. Waiting for it to be signed..."
         sleep 5
+    else
+        print_error "Puppet agent failed with exit code $rc"
+        exit $rc
     fi
 done
 
 print_status "Puppet node setup completed successfully."
-
