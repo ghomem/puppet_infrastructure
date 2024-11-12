@@ -3,6 +3,7 @@ define puppet_infrastructure::docker_container (
   $app_port = '',
   $host_port = '',
   $tag = 'latest',
+  $ensure = 'present',
   $digest = '',
   $myorigin = '',
   $username = '',
@@ -31,13 +32,13 @@ define puppet_infrastructure::docker_container (
   if $digest != '' {
     $image_id = "${img_name}@${digest}"
     docker::image { $image:
-      ensure       => present,
+      ensure       => $ensure,
       image_digest => $digest,
     }
   } else {
     $image_id = "${img_name}:${tag}"
     docker::image { $image:
-      ensure    => present,
+      ensure    => $ensure,
       image_tag => $tag,
     }
   }
