@@ -13,45 +13,6 @@
     <!-- Custom style -->
     <link rel="stylesheet" href="{{ url_for('static',filename='styles/custom.css')  }}" />
     
-    <!-- OPTIONAL Inline style just for the password toggle icon layout -->
-    <style>
-      /* Wrapper around the input and icon */
-      .password-input-wrapper {
-        position: relative;
-        display: block;
-        margin-bottom: 1rem; /* space below each field */
-      }
-      /* Ensure the input has room on the right for the icon */
-      .password-input-wrapper input[type=password],
-      .password-input-wrapper input[type=text],
-      .password-input-wrapper input[type=password][aria-invalid],
-      .password-input-wrapper input[type=text][aria-invalid] { 
-        width: 100% !important;
-        padding-left: 2.5rem !important;
-      }
-      /* The eye icon container */
-      .toggle-visibility {
-        cursor: pointer;
-        position: absolute;
-        top: 40%;
-        left: 0.75rem;
-        right: auto;
-        transform: translateY(-50%);
-        color: inherit; 
-        display: flex;
-        align-items: center;
-      }
-      /* Hover styling if desired */
-      .toggle-visibility:hover {
-        opacity: 0.7;
-      }
-      /* SVG icon size */
-      .toggle-visibility svg {
-        width: 1em;
-        height: 1em;
-      }
-    </style>
-
   </head>
 
   <body>
