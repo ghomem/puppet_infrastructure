@@ -57,3 +57,42 @@
     margin: 0; /* remove default margin */
     color: #094f03; !important;
 }
+
+.password-input-wrapper {
+  position: relative;
+  display: block;
+  margin-bottom: 1rem; /* space below each field */
+}
+
+.toggle-visibility {
+  cursor: pointer;
+  position: absolute;
+  top: 40%;
+  left: 0.75rem;
+  right: auto;
+  transform: translateY(-50%);
+  color: inherit;
+  display: flex;
+  align-items: center;
+}
+
+.toggle-visibility:hover {
+  opacity: 0.7;
+}
+
+.toggle-visibility svg {
+  width: 1em;
+  height: 1em;
+}
+
+.password-input-wrapper input[type=password],
+.password-input-wrapper input[type=text],
+.password-input-wrapper input[type=password][aria-invalid],
+.password-input-wrapper input[type=text][aria-invalid],
+.password-input-wrapper input[type=password][aria-invalid="true"],
+.password-input-wrapper input[type=password][aria-invalid="false"],
+.password-input-wrapper input[type=text][aria-invalid="true"],
+.password-input-wrapper input[type=text][aria-invalid="false"] {
+  width: 100%;
+  padding-left: 2.5rem !important;
+}
