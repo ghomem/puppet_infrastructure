@@ -111,7 +111,9 @@ define puppet_infrastructure::ssl_base (
 
   }
   else {
-    fail ("This defined type currently does not support myservice => '${myservice}'.")
+    warning("puppet_infrastructure::ssl_base: Externally managed service '${myservice}'.
+      We will place the key file and will notify Service['${myservicename}'] if it exists.
+      No certificate bundling is done automatically for this service.")
   }
 
 }
