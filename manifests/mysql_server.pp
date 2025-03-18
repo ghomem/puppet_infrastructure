@@ -86,13 +86,6 @@ class puppet_infrastructure::mysql_server (
     mode   => '0755'
   }
 
-  file { '/var/log/mysql':
-    ensure => 'directory',
-    owner  => 'mysql',
-    group  => 'adm',
-    mode   => '0755',
-  }
-
   if ( $generate_certificates ) {
 
     file { "$bindir/deploy_self_signed_certificates.sh":
@@ -172,5 +165,12 @@ class puppet_infrastructure::mysql_server (
     override_options        => $full_override_options,
   }
 
+  file { '/var/log/mysql':
+    ensure  => 'directory',
+    owner   => 'mysql',
+    group   => 'adm',
+    mode    => '0755',
+    require => Package['mariadb-server'],
+  }
 }
 
