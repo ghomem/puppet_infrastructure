@@ -170,7 +170,7 @@ class puppet_infrastructure::mysql_server (
     owner   => 'mysql',
     group   => 'adm',
     mode    => '0755',
-    require => Package['mariadb-server'],
+    require => Package['mysql-server'],
   }
 }
 
