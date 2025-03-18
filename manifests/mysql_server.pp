@@ -86,6 +86,13 @@ class puppet_infrastructure::mysql_server (
     mode   => '0755'
   }
 
+  file { '/var/log/mysql':
+    ensure => 'directory',
+    owner  => 'mysql',
+    group  => 'adm',
+    mode   => '0755',
+  }
+
   if ( $generate_certificates ) {
 
     file { "$bindir/deploy_self_signed_certificates.sh":
