@@ -152,6 +152,11 @@ class puppet_infrastructure::openvpn_server (
         notify => Service['openvpn-server@puppet_infrastructure'],
     }
 
+    #Set the default path of the config file
+    class { 'openvpn':
+      server_directory => '/etc/openvpn/server',
+    }
+
     # configuration of the openvpn server itself
     openvpn::server { 'puppet_infrastructure':
         verb                     => '3',
