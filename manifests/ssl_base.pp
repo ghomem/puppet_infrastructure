@@ -61,12 +61,12 @@ define puppet_infrastructure::ssl_base (
     }
   }
 
-  if ( $letsencrypt_certificate ) {
+  if $letsencrypt_certificate {
     $key_file                 = "${ssl_private_dir}/${myprefix}-key.pem"
     $key_source               = "puppet:///extra_files/ssl/${myprefix}-key.pem"
     $bundle_file              = "${ssl_certs_dir}/${myprefix}.${myservice}.bundle.pem"
     $first_cert_source        = "puppet:///extra_files/ssl/${myprefix}.pem"
-    $intermediate_cert_source = "puppet:///extra_files/ssl/${myprefix}-chain.pem" 
+    $intermediate_cert_source = "puppet:///extra_files/ssl/${myprefix}-chain.pem"
   } else {
     $key_file                 = "${ssl_private_dir}/${myprefix}.key"
     $key_source               = "puppet:///extra_files/ssl/${myprefix}.key"
@@ -75,43 +75,40 @@ define puppet_infrastructure::ssl_base (
     $intermediate_cert_source = "puppet:///extra_files/ssl/${myprefix}.intermediate.crt"
   }
 
-  # create the private key
+  # Key file: always created, always notifies service
   file { $key_file:
     ensure => present,
-    notify => Service[ $myservicename ],
+    notify => Service[$myservicename],
     mode   => '0600',
     owner  => 'root',
     group  => 'root',
     source => $key_source,
   }
 
-  # these services just need a simple concatenation of the certificate and intermediate certificates
-  if( $myservice in ['nginx', 'postfix', ] ) {
-
-    concat { $bundle_file:
-      ensure         => present,
-      notify         => Service[ $myservicename ],
-      mode           => '0644',
-      owner          => 'root',
-      group          => 'root',
-      ensure_newline => true,
-    }
-
-    concat::fragment { "first_certificate_${myprefix}":
-      target => $bundle_file,
-      order  => '01',
-      source => $first_cert_source,
-    }
-
-    concat::fragment { "intermediate_certificates_${myprefix}":
-      target => $bundle_file,
-      order  => '02',
-      source => $intermediate_cert_source,
-    }
-
-  }
-  else {
-    fail ("This defined type currently does not support myservice => '${myservice}'.")
+  # If the service is not one of the “known” ones, log a warning rather than fail.
+    unless $myservice in ['nginx','postfix'] {
+    notify { 'WARNING: puppet_infrastructure::ssl_base: Externally managed service "${myservice}" will be notified.': withpath => false }
   }
 
+  # Always do the bundling
+  concat { $bundle_file:
+    ensure         => present,
+    notify         => Service[$myservicename],
+    mode           => '0644',
+    owner          => 'root',
+    group          => 'root',
+    ensure_newline => true,
+  }
+
+  concat::fragment { "first_certificate_${myprefix}":
+    target => $bundle_file,
+    order  => '01',
+    source => $first_cert_source,
+  }
+
+  concat::fragment { "intermediate_certificates_${myprefix}":
+    target => $bundle_file,
+    order  => '02',
+    source => $intermediate_cert_source,
+  }
 }
