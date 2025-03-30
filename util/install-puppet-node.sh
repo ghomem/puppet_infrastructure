@@ -111,9 +111,20 @@ fi
 
 print_status "Disabling cloud-init and setting MTU to 1500..."
 
-run_cmd "touch /etc/cloud/cloud-init.disabled" "Failed to disable cloud-init"
-echo "supersede interface-mtu 1500;" >> /etc/dhcp/dhclient.conf
-handle_error $? "Failed to set MTU in dhclient.conf"
+# Only disable cloud-init if /etc/cloud exists
+if [ -d "/etc/cloud" ]; then
+    run_cmd "touch /etc/cloud/cloud-init.disabled" "Failed to disable cloud-init"
+else
+    print_warning "/etc/cloud does not exist. Skipping cloud-init disable."
+fi
+
+# Only set MTU in dhclient.conf if the file exists
+if [ -f "/etc/dhcp/dhclient.conf" ]; then
+    echo "supersede interface-mtu 1500;" >> /etc/dhcp/dhclient.conf
+    handle_error $? "Failed to set MTU in dhclient.conf"
+else
+    print_warning "/etc/dhcp/dhclient.conf does not exist. Skipping MTU override."
+fi
 
 if ! command -v perl &> /dev/null; then
     print_status "Perl could not be found. Installing Perl..."
