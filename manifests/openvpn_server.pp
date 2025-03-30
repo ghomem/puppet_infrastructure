@@ -27,7 +27,7 @@ class puppet_infrastructure::openvpn_server (
     # Only set to true on systems with Netplan
     Boolean $force_ifupdown   = false,
     $reneg_sec                = 3600, # amount of seconds between each session key renegotiation
-    $compression              = 'comp-lzo'
+    $compression              = 'comp-lzo' # To disable compression this value needs to be set to 'none'
 
 ){
     $major_release = $facts['os']['release']['major']
