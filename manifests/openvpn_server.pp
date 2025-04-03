@@ -26,7 +26,8 @@ class puppet_infrastructure::openvpn_server (
     # Defines whether the primary interface should be forcefully managed by ifupdown
     # Only set to true on systems with Netplan
     Boolean $force_ifupdown   = false,
-    $reneg_sec                = 3600 # amount of seconds between each session key renegotiation
+    $reneg_sec                = 3600, # amount of seconds between each session key renegotiation
+    $compression              = 'comp-lzo' # To disable compression this value needs to be set to 'none'
 
 ){
     $major_release = $facts['os']['release']['major']
@@ -152,12 +153,17 @@ class puppet_infrastructure::openvpn_server (
         notify => Service['openvpn-server@puppet_infrastructure'],
     }
 
+    #Set the default path of the config file
+    class { 'openvpn':
+      server_directory => '/etc/openvpn/server',
+    }
+
     # configuration of the openvpn server itself
     openvpn::server { 'puppet_infrastructure':
         verb                     => '3',
         user                     => 'nobody',
         proto                    => 'udp',
-        compression              => 'comp-lzo',
+        compression              => $compression,
         dev                      => 'tap0',
         username_as_common_name  => true,
         pam                      => true,
