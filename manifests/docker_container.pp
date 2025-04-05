@@ -12,7 +12,7 @@ define puppet_infrastructure::docker_container (
   $env = []
 ) {
   $registry_url = split($image, '/')[0]
-  $img_name = $image
+  $img_name     = $image
 
   if $host_port == '' {
     $myhost_port = $app_port
@@ -46,9 +46,9 @@ define puppet_infrastructure::docker_container (
   # Define the name for the docker run instance
   $container_name = $name
 
-  # Define the port configuration
+  # Always bind exposed ports to 127.0.0.1
   if $app_port != '' {
-    $myapp_port = ["${myhost_port}:${app_port}"]
+    $myapp_port = ["127.0.0.1:${myhost_port}:${app_port}"]
   } else {
     $myapp_port = []
   }
