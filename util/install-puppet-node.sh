@@ -12,7 +12,6 @@ function print_usage ()
 function handle_error () {
     rc=$1
     err_message=$2
-
     if [ "0" != "$rc" ]; then
         print_error "$err_message"
         exit $rc
@@ -111,7 +110,6 @@ if [ -z "$(swapon --show)" ]; then
         run_cmd "/sbin/swapon $SWAPFILE" "Failed to enable swap file"
         run_cmd "cp -f /etc/fstab /etc/fstab.orig" "Failed to backup /etc/fstab"
 
-        # Append line to fstab if not already present
         grep $SWAPFILE /etc/fstab > /dev/null 2>&1 || echo "$SWAPFILE  swap  swap  defaults  0  0" >> /etc/fstab
         handle_error $? "Failed to update /etc/fstab"
     else
@@ -147,10 +145,8 @@ fi
 if ! command -v perl &> /dev/null; then
     print_status "Perl could not be found. Installing Perl..."
     if [ -f /etc/redhat-release ]; then
-        # For RHEL/CentOS
         run_cmd "yum install -y perl" "Failed to install Perl"
     else
-        # For Debian/Ubuntu
         run_cmd "apt-get update" "Failed to update apt-get"
         run_cmd "apt-get install -y perl" "Failed to install Perl"
     fi
@@ -174,7 +170,6 @@ if [ "x$SETHOSTNAME" = "xyes" ]; then
     print_status "Setting hostname to $NODENAME..."
     run_cmd "hostnamectl set-hostname $NODENAME" "Failed to set hostname"
 
-    # Add an entry in /etc/hosts if needed
     grep "$NODENAME" /etc/hosts > /dev/null 2>&1 || echo "127.0.0.1 ${NODENAME}.${DOMAIN} ${NODENAME}" >> /etc/hosts
     handle_error $? "Failed to update /etc/hosts"
 fi
@@ -186,9 +181,7 @@ fi
 print_status "Detecting OS and installing Puppet agent..."
 
 if [ -f /etc/redhat-release ]; then
-    #
     # ------------------ RHEL / CENTOS LOGIC ------------------
-    #
     RHELREPOPKGURL=https://yum.puppet.com/puppet-release-el-$(rpm -E '%{rhel}').noarch.rpm
     RHELREPOPKG=/tmp/puppetlabs-release-puppet5.rpm
 
@@ -198,47 +191,46 @@ if [ -f /etc/redhat-release ]; then
     run_cmd "yum install -y puppet-agent" "Failed to install Puppet agent"
 
 else
-    #
     # ------------------ DEBIAN / UBUNTU LOGIC ------------------
-    #
-    # This part installs Puppet 5 from the "bionic" release, then
-    # DOES EXTRA STEPS if we detect Ubuntu 22.04 or 24.04
-    #
-
     UBUNTUREPOPKGURL="http://apt.puppetlabs.com/puppet5-release-bionic.deb"
     UBUNTUREPOPKG="/tmp/puppetlabs-release-puppet5.deb"
 
+    # Basic update and install wget
     run_cmd "apt-get update" "Failed to update apt-get"
     run_cmd "apt-get install -y wget" "Failed to install wget"
+
+    # Download & install puppet5 bionic repo package
     run_cmd "wget -O $UBUNTUREPOPKG $UBUNTUREPOPKGURL" "Failed to download Puppet repo package"
     run_cmd "dpkg -i $UBUNTUREPOPKG" "Failed to install Puppet repo package"
-    run_cmd "apt-get update" "Failed to update apt-get after installing Puppet repo"
 
     # -------------------------------------------------------------------------
-    # Here is the special fix for Ubuntu 22.04 / 24.04 to use the old GPG key.
+    # SPECIAL FIX for Ubuntu 22.04 / 24.04:
+    # Import the OLD GPG key BEFORE we run `apt-get update` again.
     # -------------------------------------------------------------------------
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         if [ "$ID" = "ubuntu" ] && [[ "$VERSION_ID" == "22.04" || "$VERSION_ID" == "24.04" ]]; then
             print_status "Applying Puppet 5 GPG key fix for Ubuntu $VERSION_ID..."
             run_cmd "apt-get install -y gnupg dirmngr" "Failed to install gnupg/dirmngr"
+
             run_cmd "mkdir -p /root/.gnupg && chmod 700 /root/.gnupg" "Failed to create /root/.gnupg directory"
             run_cmd "rm -f /etc/apt/keyrings/puppet.gpg" "Failed to remove existing puppet.gpg if any"
 
-            # Rewrite the puppet5.list with the 'signed-by' syntax
+            # Overwrite puppet5.list with 'signed-by' syntax
             run_cmd "bash -c 'cat << EOF > /etc/apt/sources.list.d/puppet5.list
 deb [signed-by=/etc/apt/keyrings/puppet.gpg] http://apt.puppetlabs.com bionic puppet5
 EOF
-'" "Failed to create puppet5.list with signed-by"
+'" "Failed to write /etc/apt/sources.list.d/puppet5.list"
 
-            # Pull the old Puppet 5 key by fingerprint from keyserver
+            # Import the EXACT old Puppet 5 key from keyserver
             run_cmd "gpg --no-default-keyring --keyring /etc/apt/keyrings/puppet.gpg --keyserver keyserver.ubuntu.com --recv-keys 4528B6CD9E61EF26" "Failed to import old Puppet 5 key"
-
-            run_cmd "apt-get update" "Failed to update apt-get after old key import"
         fi
     fi
 
-    # Now install puppet-agent from that repo
+    # Now that we have the correct key for puppet5, we can safely update
+    run_cmd "apt-get update" "Failed to update apt-get after installing Puppet repo"
+
+    # Finally, install the puppet-agent from bionic repo
     run_cmd "apt-get install -t bionic -y puppet-agent" "Failed to install Puppet agent"
 fi
 
@@ -247,10 +239,9 @@ fi
 ###############################################################################
 
 print_status "Configuring Puppet agent..."
-
 run_cmd "cp -f $NODECONF ${NODECONF}.orig" "Failed to backup puppet.conf"
 
-cat > /etc/puppetlabs/puppet/puppet.conf <<EOL
+cat > "$NODECONF" <<EOL
 [main]
 server=${MASTER}
 node_name=cert
@@ -268,10 +259,10 @@ run_cmd "$PUPPETBIN resource service puppet ensure=running enable=true provider=
 
 if [ "x$START" = "xyes" ]; then
     run_cmd "systemctl enable puppet" "Failed to enable Puppet service"
-    run_cmd "systemctl start puppet" "Failed to start Puppet service"
+    run_cmd "systemctl start puppet"  "Failed to start Puppet service"
 else
     run_cmd "systemctl disable puppet" "Failed to disable Puppet service"
-    run_cmd "systemctl stop puppet" "Failed to stop Puppet service"
+    run_cmd "systemctl stop puppet"    "Failed to stop Puppet service"
 fi
 
 ###############################################################################
@@ -289,7 +280,7 @@ print_status "Requesting certificate from Puppet master..."
 CERT_SIGNED=no
 CERTFILE="/var/lib/puppet/ssl/certs/${NODENAME}.pem"
 
-# Remove any existing SSL certificates to ensure a fresh start
+# Remove any existing SSL certificates to ensure a fresh request
 rm -rf /var/lib/puppet/ssl
 
 while [ "$CERT_SIGNED" = "no" ]; do
@@ -317,11 +308,10 @@ else
 fi
 
 rc=$?
-
 if [ $rc -eq 0 ] || [ $rc -eq 2 ] || [ $rc -eq 4 ] || [ $rc -eq 6 ]; then
     print_status "Puppet agent execution has completed."
 else
-    print_error "Puppet agent failed with exit code $rc. Try to run it manually for more details with 'sudo puppet agent -t'"
+    print_error "Puppet agent failed with exit code $rc. Try to run it manually with 'sudo puppet agent -t'"
     exit $rc
 fi
 
