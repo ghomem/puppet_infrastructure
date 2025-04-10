@@ -1,6 +1,8 @@
 #!/bin/bash
 
-# Function definitions
+###############################################################################
+# 1) FUNCTION DEFINITIONS
+###############################################################################
 
 function print_usage ()
 {
@@ -41,15 +43,21 @@ function print_warning () {
 function run_cmd () {
     local cmd="$1"
     local err_message="$2"
+
+    print_debug "Running: $cmd"
     if [ "$DEBUG" = "yes" ]; then
         eval $cmd
     else
         eval $cmd > /dev/null 2>&1
     fi
+
     handle_error $? "$err_message"
 }
 
-# Initialize DEBUG to no
+###############################################################################
+# 2) PARSE ARGUMENTS
+###############################################################################
+
 DEBUG=no
 
 # Process options
@@ -79,7 +87,7 @@ if [ -z "$NODENAME" ] || [ -z "$DOMAIN" ]; then
 fi
 
 if [ -z "$MASTER" ]; then
-    MASTER=puppet.$DOMAIN
+    MASTER="puppet.$DOMAIN"
 fi
 
 SETHOSTNAME=yes
@@ -88,18 +96,22 @@ NODECONF=/etc/puppetlabs/puppet/puppet.conf
 PUPPETBIN=/opt/puppetlabs/bin/puppet
 SWAPFILE=/swapfile
 
+###############################################################################
+# 3) SWAPFILE CREATION IF NEEDED
+###############################################################################
+
 print_status "Checking if swap is already in use..."
 
 if [ -z "$(swapon --show)" ]; then
     if grep -q container /proc/1/environ; then
         print_status "No swap detected and running inside a container. Creating swap file..."
-
         run_cmd "/bin/dd if=/dev/zero of=$SWAPFILE bs=1M count=1024" "Failed to create swap file"
         run_cmd "/sbin/mkswap $SWAPFILE" "Failed to set up swap file"
         run_cmd "chmod 600 $SWAPFILE" "Failed to set permissions on swap file"
         run_cmd "/sbin/swapon $SWAPFILE" "Failed to enable swap file"
-
         run_cmd "cp -f /etc/fstab /etc/fstab.orig" "Failed to backup /etc/fstab"
+
+        # Append line to fstab if not already present
         grep $SWAPFILE /etc/fstab > /dev/null 2>&1 || echo "$SWAPFILE  swap  swap  defaults  0  0" >> /etc/fstab
         handle_error $? "Failed to update /etc/fstab"
     else
@@ -109,22 +121,28 @@ else
     print_status "Swap is already in use."
 fi
 
+###############################################################################
+# 4) DISABLE CLOUD-INIT, SET MTU
+###############################################################################
+
 print_status "Disabling cloud-init and setting MTU to 1500..."
 
-# Only disable cloud-init if /etc/cloud exists
 if [ -d "/etc/cloud" ]; then
     run_cmd "touch /etc/cloud/cloud-init.disabled" "Failed to disable cloud-init"
 else
     print_warning "/etc/cloud does not exist. Skipping cloud-init disable."
 fi
 
-# Only set MTU in dhclient.conf if the file exists
 if [ -f "/etc/dhcp/dhclient.conf" ]; then
     echo "supersede interface-mtu 1500;" >> /etc/dhcp/dhclient.conf
     handle_error $? "Failed to set MTU in dhclient.conf"
 else
     print_warning "/etc/dhcp/dhclient.conf does not exist. Skipping MTU override."
 fi
+
+###############################################################################
+# 5) ENSURE PERL IS INSTALLED
+###############################################################################
 
 if ! command -v perl &> /dev/null; then
     print_status "Perl could not be found. Installing Perl..."
@@ -140,40 +158,93 @@ else
     print_status "Perl is already installed."
 fi
 
-print_status "Backing up /etc/sudoers and fixing secure_path..."
+###############################################################################
+# 6) FIX SUDOERS SECURE_PATH
+###############################################################################
 
+print_status "Backing up /etc/sudoers and fixing secure_path..."
 run_cmd "cp -f /etc/sudoers /etc/sudoers.orig" "Failed to backup /etc/sudoers"
 perl -pi -e 's/^(Defaults\s*secure_path\s?=\s?\"?[^\"\n]*)(\"?)$/$1:\/opt\/puppetlabs\/bin$2/' /etc/sudoers
 
+###############################################################################
+# 7) SET HOSTNAME (OPTIONAL)
+###############################################################################
+
 if [ "x$SETHOSTNAME" = "xyes" ]; then
     print_status "Setting hostname to $NODENAME..."
-
     run_cmd "hostnamectl set-hostname $NODENAME" "Failed to set hostname"
+
+    # Add an entry in /etc/hosts if needed
     grep "$NODENAME" /etc/hosts > /dev/null 2>&1 || echo "127.0.0.1 ${NODENAME}.${DOMAIN} ${NODENAME}" >> /etc/hosts
     handle_error $? "Failed to update /etc/hosts"
 fi
 
+###############################################################################
+# 8) OS DETECTION AND PUPPET 5 INSTALLATION
+###############################################################################
+
 print_status "Detecting OS and installing Puppet agent..."
 
 if [ -f /etc/redhat-release ]; then
+    #
+    # ------------------ RHEL / CENTOS LOGIC ------------------
+    #
     RHELREPOPKGURL=https://yum.puppet.com/puppet-release-el-$(rpm -E '%{rhel}').noarch.rpm
     RHELREPOPKG=/tmp/puppetlabs-release-puppet5.rpm
-    # RHEL/CentOS
+
     run_cmd "yum install -y wget" "Failed to install wget"
     run_cmd "wget -O $RHELREPOPKG $RHELREPOPKGURL" "Failed to download Puppet repo package"
     run_cmd "yum install -y $RHELREPOPKG" "Failed to install Puppet repo package"
     run_cmd "yum install -y puppet-agent" "Failed to install Puppet agent"
+
 else
-    UBUNTUREPOPKGURL=http://apt.puppetlabs.com/puppet5-release-bionic.deb
-    UBUNTUREPOPKG=/tmp/puppetlabs-release-puppet5.deb
-    # Ubuntu
+    #
+    # ------------------ DEBIAN / UBUNTU LOGIC ------------------
+    #
+    # This part installs Puppet 5 from the "bionic" release, then
+    # DOES EXTRA STEPS if we detect Ubuntu 22.04 or 24.04
+    #
+
+    UBUNTUREPOPKGURL="http://apt.puppetlabs.com/puppet5-release-bionic.deb"
+    UBUNTUREPOPKG="/tmp/puppetlabs-release-puppet5.deb"
+
     run_cmd "apt-get update" "Failed to update apt-get"
     run_cmd "apt-get install -y wget" "Failed to install wget"
     run_cmd "wget -O $UBUNTUREPOPKG $UBUNTUREPOPKGURL" "Failed to download Puppet repo package"
     run_cmd "dpkg -i $UBUNTUREPOPKG" "Failed to install Puppet repo package"
     run_cmd "apt-get update" "Failed to update apt-get after installing Puppet repo"
+
+    # -------------------------------------------------------------------------
+    # Here is the special fix for Ubuntu 22.04 / 24.04 to use the old GPG key.
+    # -------------------------------------------------------------------------
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        if [ "$ID" = "ubuntu" ] && [[ "$VERSION_ID" == "22.04" || "$VERSION_ID" == "24.04" ]]; then
+            print_status "Applying Puppet 5 GPG key fix for Ubuntu $VERSION_ID..."
+            run_cmd "apt-get install -y gnupg dirmngr" "Failed to install gnupg/dirmngr"
+            run_cmd "mkdir -p /root/.gnupg && chmod 700 /root/.gnupg" "Failed to create /root/.gnupg directory"
+            run_cmd "rm -f /etc/apt/keyrings/puppet.gpg" "Failed to remove existing puppet.gpg if any"
+
+            # Rewrite the puppet5.list with the 'signed-by' syntax
+            run_cmd "bash -c 'cat << EOF > /etc/apt/sources.list.d/puppet5.list
+deb [signed-by=/etc/apt/keyrings/puppet.gpg] http://apt.puppetlabs.com bionic puppet5
+EOF
+'" "Failed to create puppet5.list with signed-by"
+
+            # Pull the old Puppet 5 key by fingerprint from keyserver
+            run_cmd "gpg --no-default-keyring --keyring /etc/apt/keyrings/puppet.gpg --keyserver keyserver.ubuntu.com --recv-keys 4528B6CD9E61EF26" "Failed to import old Puppet 5 key"
+
+            run_cmd "apt-get update" "Failed to update apt-get after old key import"
+        fi
+    fi
+
+    # Now install puppet-agent from that repo
     run_cmd "apt-get install -t bionic -y puppet-agent" "Failed to install Puppet agent"
 fi
+
+###############################################################################
+# 9) CONFIGURE PUPPET AGENT (puppet.conf) & START SERVICE
+###############################################################################
 
 print_status "Configuring Puppet agent..."
 
@@ -193,7 +264,6 @@ EOL
 handle_error $? "Failed to create puppet.conf"
 
 print_status "Starting Puppet service..."
-
 run_cmd "$PUPPETBIN resource service puppet ensure=running enable=true provider=systemd" "Failed to start Puppet service"
 
 if [ "x$START" = "xyes" ]; then
@@ -203,6 +273,10 @@ else
     run_cmd "systemctl disable puppet" "Failed to disable Puppet service"
     run_cmd "systemctl stop puppet" "Failed to stop Puppet service"
 fi
+
+###############################################################################
+# 10) CERTIFICATE REQUEST & FIRST RUN
+###############################################################################
 
 if [ -z "$WAITFORCERT" ]; then
     WAITFORCERT=10
@@ -224,6 +298,7 @@ while [ "$CERT_SIGNED" = "no" ]; do
     else
         $PUPPETBIN agent --test $EXTRA_ARGS > /dev/null 2>&1
     fi
+
     if [ -f "$CERTFILE" ]; then
         CERT_SIGNED=yes
         print_status "Certificate has been signed."
