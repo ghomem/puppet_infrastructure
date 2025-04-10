@@ -165,5 +165,12 @@ class puppet_infrastructure::mysql_server (
     override_options        => $full_override_options,
   }
 
+  file { '/var/log/mysql':
+    ensure  => 'directory',
+    owner   => 'mysql',
+    group   => 'adm',
+    mode    => '0755',
+    require => Package['mysql-server'],
+  }
 }
 
