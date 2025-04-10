@@ -145,8 +145,10 @@ fi
 if ! command -v perl &> /dev/null; then
     print_status "Perl could not be found. Installing Perl..."
     if [ -f /etc/redhat-release ]; then
+        # RHEL/CentOS
         run_cmd "yum install -y perl" "Failed to install Perl"
     else
+        # Debian/Ubuntu
         run_cmd "apt-get update" "Failed to update apt-get"
         run_cmd "apt-get install -y perl" "Failed to install Perl"
     fi
@@ -182,7 +184,7 @@ print_status "Detecting OS and installing Puppet agent..."
 
 if [ -f /etc/redhat-release ]; then
     # ------------------ RHEL / CENTOS LOGIC ------------------
-    RHELREPOPKGURL=https://yum.puppet.com/puppet-release-el-$(rpm -E '%{rhel}').noarch.rpm
+    RHELREPOPKGURL="https://yum.puppet.com/puppet-release-el-$(rpm -E '%{rhel}').noarch.rpm"
     RHELREPOPKG=/tmp/puppetlabs-release-puppet5.rpm
 
     run_cmd "yum install -y wget" "Failed to install wget"
@@ -197,7 +199,7 @@ else
 
     # Basic update and install wget
     run_cmd "apt-get update" "Failed to update apt-get"
-    run_cmd "apt-get install -y wget" "Failed to install wget"
+    run_cmd "apt-get install -y wget gnupg dirmngr" "Failed to install wget/gnupg/dirmngr"
 
     # Download & install puppet5 bionic repo package
     run_cmd "wget -O $UBUNTUREPOPKG $UBUNTUREPOPKGURL" "Failed to download Puppet repo package"
@@ -205,16 +207,18 @@ else
 
     # -------------------------------------------------------------------------
     # SPECIAL FIX for Ubuntu 22.04 / 24.04:
-    # Import the OLD GPG key BEFORE we run `apt-get update` again.
+    # We'll forcibly allow insecure repos (due to expired GPG signature).
+    # Also we try to import the old key by fingerprint, but since it's expired,
+    # we must do the apt.conf.d override as well.
     # -------------------------------------------------------------------------
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         if [ "$ID" = "ubuntu" ] && [[ "$VERSION_ID" == "22.04" || "$VERSION_ID" == "24.04" ]]; then
             print_status "Applying Puppet 5 GPG key fix for Ubuntu $VERSION_ID..."
-            run_cmd "apt-get install -y gnupg dirmngr" "Failed to install gnupg/dirmngr"
 
+            # Ensure GPG can run
             run_cmd "mkdir -p /root/.gnupg && chmod 700 /root/.gnupg" "Failed to create /root/.gnupg directory"
-            run_cmd "rm -f /etc/apt/keyrings/puppet.gpg" "Failed to remove existing puppet.gpg if any"
+            run_cmd "rm -f /etc/apt/keyrings/puppet.gpg" "Failed to remove existing puppet.gpg (if any)"
 
             # Overwrite puppet5.list with 'signed-by' syntax
             run_cmd "bash -c 'cat << EOF > /etc/apt/sources.list.d/puppet5.list
@@ -224,10 +228,18 @@ EOF
 
             # Import the EXACT old Puppet 5 key from keyserver
             run_cmd "gpg --no-default-keyring --keyring /etc/apt/keyrings/puppet.gpg --keyserver keyserver.ubuntu.com --recv-keys 4528B6CD9E61EF26" "Failed to import old Puppet 5 key"
+
+            # *** Force apt to allow insecure repositories due to expired signature ***
+            run_cmd "bash -c 'cat << EOF > /etc/apt/apt.conf.d/99puppet5-insecure
+APT::Get::AllowUnauthenticated \"true\";
+Acquire::AllowInsecureRepositories \"true\";
+Acquire::AllowDowngradeToInsecureRepositories \"true\";
+EOF
+'" "Failed to create 99puppet5-insecure apt config"
         fi
     fi
 
-    # Now that we have the correct key for puppet5, we can safely update
+    # Now that we've forcibly allowed insecure signing, do an update
     run_cmd "apt-get update" "Failed to update apt-get after installing Puppet repo"
 
     # Finally, install the puppet-agent from bionic repo
