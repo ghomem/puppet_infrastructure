@@ -85,6 +85,7 @@ if [ -z "$NODENAME" ] || [ -z "$DOMAIN" ]; then
     exit 1
 fi
 
+# Default puppet master if not specified
 if [ -z "$MASTER" ]; then
     MASTER="puppet.$DOMAIN"
 fi
@@ -109,7 +110,6 @@ if [ -z "$(swapon --show)" ]; then
         run_cmd "chmod 600 $SWAPFILE" "Failed to set permissions on swap file"
         run_cmd "/sbin/swapon $SWAPFILE" "Failed to enable swap file"
         run_cmd "cp -f /etc/fstab /etc/fstab.orig" "Failed to backup /etc/fstab"
-
         grep $SWAPFILE /etc/fstab > /dev/null 2>&1 || echo "$SWAPFILE  swap  swap  defaults  0  0" >> /etc/fstab
         handle_error $? "Failed to update /etc/fstab"
     else
@@ -171,19 +171,20 @@ perl -pi -e 's/^(Defaults\s*secure_path\s?=\s?\"?[^\"\n]*)(\"?)$/$1:\/opt\/puppe
 if [ "x$SETHOSTNAME" = "xyes" ]; then
     print_status "Setting hostname to $NODENAME..."
     run_cmd "hostnamectl set-hostname $NODENAME" "Failed to set hostname"
-
     grep "$NODENAME" /etc/hosts > /dev/null 2>&1 || echo "127.0.0.1 ${NODENAME}.${DOMAIN} ${NODENAME}" >> /etc/hosts
     handle_error $? "Failed to update /etc/hosts"
 fi
 
 ###############################################################################
-# 8) OS DETECTION AND PUPPET 5 INSTALLATION
+# 8) OS DETECTION AND INSTALL PUPPET 5 (TRUSTED=YES FOR UBUNTU)
 ###############################################################################
 
 print_status "Detecting OS and installing Puppet agent..."
 
 if [ -f /etc/redhat-release ]; then
-    # ------------------ RHEL / CENTOS LOGIC ------------------
+    #
+    # ------------------ RHEL/CENTOS LOGIC ------------------
+    #
     RHELREPOPKGURL="https://yum.puppet.com/puppet-release-el-$(rpm -E '%{rhel}').noarch.rpm"
     RHELREPOPKG=/tmp/puppetlabs-release-puppet5.rpm
 
@@ -193,56 +194,34 @@ if [ -f /etc/redhat-release ]; then
     run_cmd "yum install -y puppet-agent" "Failed to install Puppet agent"
 
 else
-    # ------------------ DEBIAN / UBUNTU LOGIC ------------------
+    #
+    # ------------------ DEBIAN/UBUNTU LOGIC ------------------
+    #
     UBUNTUREPOPKGURL="http://apt.puppetlabs.com/puppet5-release-bionic.deb"
     UBUNTUREPOPKG="/tmp/puppetlabs-release-puppet5.deb"
 
-    # Basic update and install wget
+    # Basic update/install
     run_cmd "apt-get update" "Failed to update apt-get"
-    run_cmd "apt-get install -y wget gnupg dirmngr" "Failed to install wget/gnupg/dirmngr"
+    run_cmd "apt-get install -y wget" "Failed to install wget"
 
-    # Download & install puppet5 bionic repo package
+    # Download & install puppet5-release
     run_cmd "wget -O $UBUNTUREPOPKG $UBUNTUREPOPKGURL" "Failed to download Puppet repo package"
     run_cmd "dpkg -i $UBUNTUREPOPKG" "Failed to install Puppet repo package"
 
     # -------------------------------------------------------------------------
-    # SPECIAL FIX for Ubuntu 22.04 / 24.04:
-    # We'll forcibly allow insecure repos (due to expired GPG signature).
-    # Also we try to import the old key by fingerprint, but since it's expired,
-    # we must do the apt.conf.d override as well.
+    # Because the Puppet 5 key is expired, we skip GPG validation entirely by
+    # marking this repo "trusted=yes".
     # -------------------------------------------------------------------------
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        if [ "$ID" = "ubuntu" ] && [[ "$VERSION_ID" == "22.04" || "$VERSION_ID" == "24.04" ]]; then
-            print_status "Applying Puppet 5 GPG key fix for Ubuntu $VERSION_ID..."
+    run_cmd "rm -f /etc/apt/sources.list.d/puppet5.list /etc/apt/keyrings/puppet.gpg" \
+            "Failed to remove any old puppet5 list or key"
 
-            # Ensure GPG can run
-            run_cmd "mkdir -p /root/.gnupg && chmod 700 /root/.gnupg" "Failed to create /root/.gnupg directory"
-            run_cmd "rm -f /etc/apt/keyrings/puppet.gpg" "Failed to remove existing puppet.gpg (if any)"
+    run_cmd "echo 'deb [trusted=yes] http://apt.puppetlabs.com bionic puppet5' \
+> /etc/apt/sources.list.d/puppet5.list" \
+            "Failed to create puppet5.list (trusted=yes)"
 
-            # Overwrite puppet5.list with 'signed-by' syntax
-            run_cmd "bash -c 'cat << EOF > /etc/apt/sources.list.d/puppet5.list
-deb [signed-by=/etc/apt/keyrings/puppet.gpg] http://apt.puppetlabs.com bionic puppet5
-EOF
-'" "Failed to write /etc/apt/sources.list.d/puppet5.list"
+    # Now apt won't check any signature for the puppet5 repo
+    run_cmd "apt-get update" "Failed to update apt-get after puppet5 repo added"
 
-            # Import the EXACT old Puppet 5 key from keyserver
-            run_cmd "gpg --no-default-keyring --keyring /etc/apt/keyrings/puppet.gpg --keyserver keyserver.ubuntu.com --recv-keys 4528B6CD9E61EF26" "Failed to import old Puppet 5 key"
-
-            # *** Force apt to allow insecure repositories due to expired signature ***
-            run_cmd "bash -c 'cat << EOF > /etc/apt/apt.conf.d/99puppet5-insecure
-APT::Get::AllowUnauthenticated \"true\";
-Acquire::AllowInsecureRepositories \"true\";
-Acquire::AllowDowngradeToInsecureRepositories \"true\";
-EOF
-'" "Failed to create 99puppet5-insecure apt config"
-        fi
-    fi
-
-    # Now that we've forcibly allowed insecure signing, do an update
-    run_cmd "apt-get update" "Failed to update apt-get after installing Puppet repo"
-
-    # Finally, install the puppet-agent from bionic repo
     run_cmd "apt-get install -t bionic -y puppet-agent" "Failed to install Puppet agent"
 fi
 
@@ -292,7 +271,7 @@ print_status "Requesting certificate from Puppet master..."
 CERT_SIGNED=no
 CERTFILE="/var/lib/puppet/ssl/certs/${NODENAME}.pem"
 
-# Remove any existing SSL certificates to ensure a fresh request
+# Remove any existing SSL certificates for a fresh request
 rm -rf /var/lib/puppet/ssl
 
 while [ "$CERT_SIGNED" = "no" ]; do
