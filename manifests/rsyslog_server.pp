@@ -3,7 +3,7 @@ class puppet_infrastructure::rsyslog_server (
   Boolean $self_forward  = true,
 ) {
 
-  include puppet_infrastructure::rsyslog_basics
+  include puppet_infrastructure::rsyslog_base
 
   $ca_file   = '/etc/puppetlabs/puppet/ssl/certs/ca.pem'
   $cert_file = "/etc/puppetlabs/puppet/ssl/certs/${facts['fqdn']}.pem"

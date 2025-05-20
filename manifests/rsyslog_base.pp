@@ -1,4 +1,4 @@
-class puppet_infrastructure::rsyslog_basics {
+class puppet_infrastructure::rsyslog_base {
 
   $pkgs = ['rsyslog', 'rsyslog-gnutls']
 
