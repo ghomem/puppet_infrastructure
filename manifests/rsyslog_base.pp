@@ -18,4 +18,33 @@ class puppet_infrastructure::rsyslog_base {
     hasrestart => true,
     subscribe  => Package[$pkgs],
   }
+
+  file { '/etc/rsyslog/tls':
+    ensure => directory,
+    owner  => 'syslog',
+    group  => 'syslog',
+    mode   => '0755',
+  }
+
+  file { '/etc/rsyslog/tls/ca.pem':
+    source => "${ssldir}/certs/ca.pem",
+    owner  => 'syslog',
+    group  => 'syslog',
+    mode   => '0644',
+  }
+
+  file { '/etc/rsyslog/tls/${trusted['certname']}.crt':
+    source => "${ssldir}/certs/${trusted['certname']}.pem",
+    owner  => 'syslog',
+    group  => 'syslog',
+    mode   => '0644',
+  }
+
+  file { '/etc/rsyslog/tls/${trusted['certname']}.key':
+    source => "${ssldir}/private_keys/${trusted['certname']}.pem",
+    owner  => 'syslog',
+    group  => 'syslog',
+    mode   => '0600',
+  }
+
 }
