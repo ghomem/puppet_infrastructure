@@ -7,9 +7,9 @@ class puppet_infrastructure::rsyslog_server (
 
   $ssldir   = "/etc/rsyslog.d/tls"
 
-  $ca_file   = "${ssldir}/certs/ca.pem"
-  $cert_file = "${ssldir}/certs/${facts['fqdn']}.pem"
-  $key_file  = "${ssldir}/private_keys/${facts['fqdn']}.pem"
+  $ca_file   = "${ssldir}/ca.pem"
+  $cert_file = "${ssldir}/${facts['fqdn']}.pem"
+  $key_file  = "${ssldir}/${facts['fqdn']}.pem"
 
   file { '/etc/rsyslog.d/30-listener.conf':
     mode    => '0644',
