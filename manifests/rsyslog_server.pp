@@ -5,9 +5,11 @@ class puppet_infrastructure::rsyslog_server (
 
   include puppet_infrastructure::rsyslog_base
 
-  $ca_file   = '/etc/puppetlabs/puppet/ssl/certs/ca.pem'
-  $cert_file = "/etc/puppetlabs/puppet/ssl/certs/${facts['fqdn']}.pem"
-  $key_file  = "/etc/puppetlabs/puppet/ssl/private_keys/${facts['fqdn']}.pem"
+  $ssldir   = $settings::ssldir      # pulled from Puppet’s own settings
+
+  $ca_file   = "${ssldir}/certs/ca.pem"
+  $cert_file = "${ssldir}/certs/${facts['fqdn']}.pem"
+  $key_file  = "${ssldir}/private_keys/${facts['fqdn']}.pem"
 
   file { '/etc/rsyslog.d/30-listener.conf':
     mode    => '0644',
