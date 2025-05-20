@@ -1,0 +1,16 @@
+# forward all logs over TLS
+$DefaultNetstreamDriver          gtls
+$DefaultNetstreamDriverCAFile    <%= $ca_file %>
+$DefaultNetstreamDriverCertFile  <%= $cert_file %>
+$DefaultNetstreamDriverKeyFile   <%= $key_file %>
+$ActionSendStreamDriverAuthMode  x509/name
+$ActionSendStreamDriverMode      1
+$ActionSendStreamDriverPermittedPeer <%= $target %>
+*.*  @@<%= $target %>:<%= $port %>
+
+<% if $use_failover && $failover -%>
+$ActionExecOnlyWhenPreviousIsSuspended on
+$ActionSendStreamDriverPermittedPeer <%= $failover %>
+*.*  @@<%= $failover %>:<%= $port %>
+$ActionExecOnlyWhenPreviousIsSuspended off
+<% end -%>
