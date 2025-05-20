@@ -5,7 +5,7 @@ class puppet_infrastructure::rsyslog_server (
 
   include puppet_infrastructure::rsyslog_base
 
-  $ssldir   = "/etc/rsyslog/tls/"
+  $ssldir   = "/etc/rsyslog.d/tls"
 
   $ca_file   = "${ssldir}/certs/ca.pem"
   $cert_file = "${ssldir}/certs/${facts['fqdn']}.pem"

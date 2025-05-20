@@ -22,28 +22,28 @@ class puppet_infrastructure::rsyslog_base {
 
   $ssldir   = "/var/lib/puppet/ssl"
 
-  file { '/etc/rsyslog/tls':
+  file { '/etc/rsyslog.d/tls':
     ensure => directory,
     owner  => 'syslog',
     group  => 'syslog',
     mode   => '0755',
   }
 
-  file { '/etc/rsyslog/tls/ca.pem':
+  file { '/etc/rsyslog.d/tls/ca.pem':
     source => "${ssldir}/certs/ca.pem",
     owner  => 'syslog',
     group  => 'syslog',
     mode   => '0644',
   }
 
-  file { "/etc/rsyslog/tls/${certname}.crt":
+  file { "/etc/rsyslog.d/tls/${certname}.crt":
     source => "${ssldir}/certs/${certname}.pem",
     owner  => 'syslog',
     group  => 'syslog',
     mode   => '0644',
   }
 
-  file { "/etc/rsyslog/tls/${certname}.key":
+  file { "/etc/rsyslog.d/tls/${certname}.key":
     source => "${ssldir}/private_keys/${certname}.pem",
     owner  => 'syslog',
     group  => 'syslog',
