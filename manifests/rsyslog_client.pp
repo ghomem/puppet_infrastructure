@@ -5,7 +5,9 @@ class puppet_infrastructure::rsyslog_client (
   Optional[String] $failover = undef,
 ) {
 
-  include rsyslog
+  class { 'rsyslog':
+    service_provider => 'systemd',
+  }
   package { 'rsyslog-gnutls': ensure => installed }
 
   $ca_file   = '/etc/puppetlabs/puppet/ssl/certs/ca.pem'

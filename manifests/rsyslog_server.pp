@@ -3,7 +3,9 @@ class puppet_infrastructure::rsyslog_server (
   Boolean $self_forward  = true,
 ) {
 
-  include rsyslog
+  class { 'rsyslog':
+    service_provider => 'systemd',
+  }
   package { 'rsyslog-gnutls': ensure => installed }
 
   $ca_file   = '/etc/puppetlabs/puppet/ssl/certs/ca.pem'
