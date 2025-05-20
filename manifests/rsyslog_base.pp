@@ -20,6 +20,8 @@ class puppet_infrastructure::rsyslog_base {
     subscribe  => Package[$pkgs],
   }
 
+  $ssldir   = "/var/lib/puppet/ssl"
+
   file { '/etc/rsyslog/tls':
     ensure => directory,
     owner  => 'syslog',
