@@ -1,5 +1,6 @@
 # TLS listener
 module(load="imtcp")
+
 global(
   DefaultNetstreamDriver="gtls"
   DefaultNetstreamDriverCAFile="<%= $ca_file %>"
@@ -7,6 +8,13 @@ global(
   DefaultNetstreamDriverKeyFile="<%= $key_file %>"
   DefaultNetstreamDriverAuthMode="x509/name"
 )
-input(type="imtcp" port="<%= $port %>" streamdriver.mode="1" streamdriver.authMode="x509/name")
+
+input(
+  type="imtcp"
+  port="<%= $port %>"
+  streamdriver.mode="1"
+  streamdriver.authMode="x509/name"
+)
+
 template(name="remote" type="string" string="/var/log/hosts/%HOSTNAME%/%PROGRAMNAME%.log")
 action(type="omfile" template="remote")

@@ -6,11 +6,13 @@ $DefaultNetstreamDriverKeyFile   <%= $key_file %>
 $ActionSendStreamDriverAuthMode  x509/name
 $ActionSendStreamDriverMode      1
 $ActionSendStreamDriverPermittedPeer <%= $target %>
+
 *.*  @@<%= $target %>:<%= $port %>
 
-<% if $use_failover && $failover -%>
+<%- if $use_failover and $failover { -%>
 $ActionExecOnlyWhenPreviousIsSuspended on
 $ActionSendStreamDriverPermittedPeer <%= $failover %>
 *.*  @@<%= $failover %>:<%= $port %>
 $ActionExecOnlyWhenPreviousIsSuspended off
-<% end -%>
+<%- } -%>
+
