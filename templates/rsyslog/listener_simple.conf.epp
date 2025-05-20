@@ -6,7 +6,6 @@ global(
   DefaultNetstreamDriverCAFile="<%= $ca_file %>"
   DefaultNetstreamDriverCertFile="<%= $cert_file %>"
   DefaultNetstreamDriverKeyFile="<%= $key_file %>"
-  DefaultNetstreamDriverAuthMode="x509/name"
 )
 
 input(
