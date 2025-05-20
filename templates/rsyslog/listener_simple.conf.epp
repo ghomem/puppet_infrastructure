@@ -17,4 +17,4 @@ input(
 )
 
 template(name="remote" type="string" string="/var/log/hosts/%HOSTNAME%/%PROGRAMNAME%.log")
-action(type="omfile" template="remote")
+action(type="omfile" dynaFile="remote")
