@@ -35,4 +35,7 @@ class puppet_infrastructure::rsyslog_server (
       notify  => Service['rsyslog'],
     }
   }
+
+  firewall { '200 accept rsyslog connections': proto  => 'tcp', dport  => 6514, action => 'accept', }
+
 }
