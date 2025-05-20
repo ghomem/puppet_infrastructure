@@ -1,5 +1,6 @@
 class puppet_infrastructure::rsyslog_base {
 
+  $certname = $trusted['certname']
   $pkgs = ['rsyslog', 'rsyslog-gnutls']
 
   package { $pkgs: ensure => installed }
@@ -33,15 +34,15 @@ class puppet_infrastructure::rsyslog_base {
     mode   => '0644',
   }
 
-  file { '/etc/rsyslog/tls/${trusted['certname']}.crt':
-    source => "${ssldir}/certs/${trusted['certname']}.pem",
+  file { "/etc/rsyslog/tls/${certname}.crt":
+    source => "${ssldir}/certs/${certname}.pem",
     owner  => 'syslog',
     group  => 'syslog',
     mode   => '0644',
   }
 
-  file { '/etc/rsyslog/tls/${trusted['certname']}.key':
-    source => "${ssldir}/private_keys/${trusted['certname']}.pem",
+  file { "/etc/rsyslog/tls/${certname}.key":
+    source => "${ssldir}/private_keys/${certname}.pem",
     owner  => 'syslog',
     group  => 'syslog',
     mode   => '0600',
