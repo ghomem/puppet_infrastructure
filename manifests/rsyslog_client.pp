@@ -10,8 +10,8 @@ class puppet_infrastructure::rsyslog_client (
   $ssldir   = "/etc/rsyslog.d/tls"
 
   $ca_file   = "${ssldir}/ca.pem"
-  $cert_file = "${ssldir}/${facts['fqdn']}.pem"
-  $key_file  = "${ssldir}/${facts['fqdn']}.pem"
+  $cert_file = "${ssldir}/${facts['fqdn']}.crt"
+  $key_file  = "${ssldir}/${facts['fqdn']}.key"
 
   file { '/etc/rsyslog.d/40-forward.conf':
     mode    => '0644',
