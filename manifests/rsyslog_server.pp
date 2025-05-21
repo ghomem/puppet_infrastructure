@@ -1,6 +1,6 @@
 class puppet_infrastructure::rsyslog_server (
   Integer $port          = 6514,
-  Boolean $self_forward  = true,
+  Boolean $self_forward  = false,
 ) {
 
   include puppet_infrastructure::rsyslog_base
