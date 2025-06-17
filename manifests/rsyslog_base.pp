@@ -17,7 +17,7 @@ class puppet_infrastructure::rsyslog_base {
   $ssldir   = $settings::ssldir
   $certname = $trusted['certname']
 
-  file { '/etc/rsyslog/tls':
+  file { '/etc/rsyslog.d/tls':
     ensure => directory,
     owner  => 'syslog',
     group  => 'syslog',
@@ -25,22 +25,22 @@ class puppet_infrastructure::rsyslog_base {
     require => Package['rsyslog'],
   }
 
-  file { '/etc/rsyslog/tls/ca.pem':
+  file { '/etc/rsyslog.d/tls/ca.pem':
     source => "${ssldir}/certs/ca.pem",
     owner  => 'syslog', group => 'syslog', mode => '0644',
-    require => File['/etc/rsyslog/tls']
+    require => File['/etc/rsyslog.d/tls']
   }
 
-  file { "/etc/rsyslog/tls/${certname}.pem":
+  file { "/etc/rsyslog.d/tls/${certname}.pem":
     source => "${ssldir}/certs/${certname}.pem",
     owner  => 'syslog', group => 'syslog', mode => '0644',
-    require => File['/etc/rsyslog/tls']
+    require => File['/etc/rsyslog.d/tls']
   }
 
-  file { "/etc/rsyslog/tls/${certname}.key":
+  file { "/etc/rsyslog.d/tls/${certname}.key":
     source => "${ssldir}/private_keys/${certname}.pem",
     owner  => 'syslog', group => 'syslog', mode => '0600',
-    require => File['/etc/rsyslog/tls']
+    require => File['/etc/rsyslog.d/tls']
   }
 
   # 4. Service
@@ -48,6 +48,6 @@ class puppet_infrastructure::rsyslog_base {
     ensure     => running,
     enable     => true,
     provider   => 'systemd',
-    subscribe  => File['/etc/rsyslog/tls'],
+    subscribe  => File['/etc/rsyslog.d/tls'],
   }
 }

@@ -3,9 +3,9 @@
 module(load="imtcp")
 global(
   DefaultNetstreamDriver="gtls"
-  DefaultNetstreamDriverCAFile="/etc/rsyslog/tls/ca.pem"
-  DefaultNetstreamDriverCertFile="/etc/rsyslog/tls/${certname}.pem"
-  DefaultNetstreamDriverKeyFile="/etc/rsyslog/tls/${certname}.key"
+  DefaultNetstreamDriverCAFile="/etc/rsyslog.d/tls/ca.pem"
+  DefaultNetstreamDriverCertFile="/etc/rsyslog.d/tls/${certname}.pem"
+  DefaultNetstreamDriverKeyFile="/etc/rsyslog.d/tls/${certname}.key"
 )
 input(
   type="imtcp"
