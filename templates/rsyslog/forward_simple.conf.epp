@@ -5,6 +5,7 @@
   Boolean         $check_names,
   Optional[String] $failover = undef
 | -%>
+# forward everything over TLS
 $DefaultNetstreamDriver          gtls
 $DefaultNetstreamDriverCAFile    /etc/rsyslog/tls/ca.pem
 $DefaultNetstreamDriverCertFile  /etc/rsyslog/tls/${certname}.pem
@@ -16,9 +17,8 @@ $ActionSendStreamDriverPermittedPeer <%= $target %>
 <% } -%>
 
 *.*  @@<%= $target %>:<%= $port %>
-
-<% if $failover -%>
+<% if $failover { -%>
 $ActionExecOnlyWhenPreviousIsSuspended on
 *.*  @@<%= $failover %>:<%= $port %>
 $ActionExecOnlyWhenPreviousIsSuspended off
-<% end -%>
+<% } -%>
