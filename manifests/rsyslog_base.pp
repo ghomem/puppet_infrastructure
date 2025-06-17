@@ -14,7 +14,7 @@ class puppet_infrastructure::rsyslog_base {
   }
 
   # 3. Copy Puppet certificates so rsyslog can read them
-  $ssldir   = $facts['puppet_config']['ssldir']
+  $ssldir   = '/var/lib/puppet/ssl'
   $certname = $trusted['certname']
 
   file { '/etc/rsyslog.d/tls':
