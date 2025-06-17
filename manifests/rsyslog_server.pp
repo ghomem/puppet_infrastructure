@@ -1,43 +1,32 @@
+# TLS listener on port 6514.  No self-forward by default.
 class puppet_infrastructure::rsyslog_server (
-  Integer $port          = 6514,
-  Boolean $self_forward  = false,
+  Integer $port           = 6514,
+  Boolean $self_forward   = false,
 ) {
-
   include puppet_infrastructure::rsyslog_base
 
-  $ssldir   = "/etc/rsyslog.d/tls"
-
-  $ca_file   = "${ssldir}/ca.pem"
-  $cert_file = "${ssldir}/${facts['fqdn']}.crt"
-  $key_file  = "${ssldir}/${facts['fqdn']}.key"
+  $certname = $trusted['certname']
 
   file { '/etc/rsyslog.d/30-listener.conf':
-    mode    => '0644',
     content => epp('puppet_infrastructure/rsyslog/listener_simple.conf.epp', {
-                    port      => $port,
-                    ca_file   => $ca_file,
-                    cert_file => $cert_file,
-                    key_file  => $key_file,
-                  }),
+      port      => $port,
+      certname  => $certname,
+    }),
+    owner   => 'root', group => 'root', mode => '0644',
     notify  => Service['rsyslog'],
   }
 
   if $self_forward {
     file { '/etc/rsyslog.d/40-forward-self.conf':
-      mode    => '0644',
       content => epp('puppet_infrastructure/rsyslog/forward_simple.conf.epp', {
-                      target       => $facts['fqdn'],
-                      ca_file      => $ca_file,
-                      cert_file    => $cert_file,
-                      key_file     => $key_file,
-                      port         => $port,
-                      use_failover => false,
-                      failover     => undef,
-                    }),
-      notify  => Service['rsyslog'],
+        target       => $certname,      # loopback
+        port         => $port,
+        certname     => $certname,
+        check_names  => false,          # certvalid avoids CN==localhost issue
+      }),
+      owner  => 'root', group => 'root', mode => '0644',
+      notify => Service['rsyslog'],
     }
   }
-
-  firewall { '200 accept rsyslog connections': proto  => 'tcp', dport  => 6514, action => 'accept', }
-
 }
+

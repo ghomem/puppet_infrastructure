@@ -1,19 +1,17 @@
+<%- | Integer $port, String $certname | -%>
 # TLS listener
 module(load="imtcp")
-
 global(
   DefaultNetstreamDriver="gtls"
-  DefaultNetstreamDriverCAFile="<%= $ca_file %>"
-  DefaultNetstreamDriverCertFile="<%= $cert_file %>"
-  DefaultNetstreamDriverKeyFile="<%= $key_file %>"
+  DefaultNetstreamDriverCAFile="/etc/rsyslog/tls/ca.pem"
+  DefaultNetstreamDriverCertFile="/etc/rsyslog/tls/${certname}.pem"
+  DefaultNetstreamDriverKeyFile="/etc/rsyslog/tls/${certname}.key"
 )
-
 input(
   type="imtcp"
   port="<%= $port %>"
   streamdriver.mode="1"
-  streamdriver.authMode="x509/name"
+  streamdriver.authMode="x509/certvalid"   # accept any cert signed by CA
 )
-
 template(name="remote" type="string" string="/var/log/hosts/%HOSTNAME%/%PROGRAMNAME%.log")
 action(type="omfile" dynaFile="remote")
