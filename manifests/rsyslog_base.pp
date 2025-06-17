@@ -22,21 +22,25 @@ class puppet_infrastructure::rsyslog_base {
     owner  => 'syslog',
     group  => 'syslog',
     mode   => '0755',
+    require => Package['rsyslog'],
   }
 
   file { '/etc/rsyslog/tls/ca.pem':
     source => "${ssldir}/certs/ca.pem",
     owner  => 'syslog', group => 'syslog', mode => '0644',
+    require => File['/etc/rsyslog/tls']
   }
 
   file { "/etc/rsyslog/tls/${certname}.pem":
     source => "${ssldir}/certs/${certname}.pem",
     owner  => 'syslog', group => 'syslog', mode => '0644',
+    require => File['/etc/rsyslog/tls']
   }
 
   file { "/etc/rsyslog/tls/${certname}.key":
     source => "${ssldir}/private_keys/${certname}.pem",
     owner  => 'syslog', group => 'syslog', mode => '0600',
+    require => File['/etc/rsyslog/tls']
   }
 
   # 4. Service
