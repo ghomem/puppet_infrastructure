@@ -1,4 +1,4 @@
-<%- | Integer $port, String $certname | -%>
+<%- | Integer $port, String $certname, String $log_root | -%>
 # TLS listener
 module(load="imtcp")
 global(
