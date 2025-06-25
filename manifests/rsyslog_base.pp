@@ -1,5 +1,3 @@
-# frozen_string_literal: true
-# Install rsyslog with TLS support, create /etc/rsyslog/tls
 class puppet_infrastructure::rsyslog_base {
 
   # 1. Packages

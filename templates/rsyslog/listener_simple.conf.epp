@@ -13,5 +13,5 @@ input(
   streamdriver.mode="1"
   streamdriver.authMode="x509/certvalid"   # accept any cert signed by CA
 )
-template(name="remote" type="string" string="/var/log/hosts/%HOSTNAME%/%PROGRAMNAME%.log")
+template(name="remote" type="string" string="<%= $log_root %>/hosts/%HOSTNAME%/%PROGRAMNAME%.log")
 action(type="omfile" dynaFile="remote")

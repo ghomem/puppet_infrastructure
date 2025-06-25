@@ -2,7 +2,9 @@
 class puppet_infrastructure::rsyslog_server (
   Integer $port           = 6514,
   Boolean $self_forward   = false,
+  String  $log_root      = '/var/log',
 ) {
+
   include puppet_infrastructure::rsyslog_base
 
   $certname = $trusted['certname']
@@ -11,6 +13,7 @@ class puppet_infrastructure::rsyslog_server (
     content => epp('puppet_infrastructure/rsyslog/listener_simple.conf.epp', {
       port      => $port,
       certname  => $certname,
+      log_root  => $log_root,
     }),
     owner   => 'root', group => 'root', mode => '0644',
     notify  => Service['rsyslog'],

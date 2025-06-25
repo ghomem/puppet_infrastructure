@@ -6,6 +6,7 @@ class puppet_infrastructure::rsyslog_client (
   Optional[String] $failover      = undef,
   Optional[String]  $failover_ip = undef,
 ) {
+
   include puppet_infrastructure::rsyslog_base
 
   $certname = $trusted['certname']
