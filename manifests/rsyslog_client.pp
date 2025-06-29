@@ -12,15 +12,19 @@ class puppet_infrastructure::rsyslog_client (
   $certname = $trusted['certname']
 
   # guarantee the name is always resolvable
-  host { $target:
-    ip     => $target_ip,
-    target => '/etc/hosts',
+  if $target_ip {
+    host { $target:
+      ip     => $target_ip,
+      target => '/etc/hosts',
+    }
   }
 
   if $failover {
-    host { $failover:
-      ip     => $failover_ip,
-      target => '/etc/hosts',
+    if $failover_ip {
+      host { $failover:
+        ip     => $failover_ip,
+        target => '/etc/hosts',
+      }
     }
   }
 
