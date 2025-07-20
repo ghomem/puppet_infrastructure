@@ -67,6 +67,8 @@ define puppet_infrastructure::docker_container (
     if $named_vols != [] {
       docker_volume { $named_vols:
         ensure => present,
+        require => Class['docker'],
+        before  => Docker::Run[$container_name],
       }
     }
   }
