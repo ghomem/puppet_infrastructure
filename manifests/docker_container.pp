@@ -65,10 +65,14 @@ define puppet_infrastructure::docker_container (
     )
 
     if $named_vols != [] {
-      docker_volume { $named_vols:
-        ensure => present,
-        require => Class['docker'],
-        before  => Docker::Run[$container_name],
+      $named_vols.each |String $vol| {
+        exec { "mkvol-${vol}":
+          command => "/usr/bin/docker volume create ${vol}",
+          unless  => "/usr/bin/docker volume inspect ${vol}",
+          path    => ['/usr/bin','/bin'],
+          require => Class['docker'],
+          before  => Docker::Run[$container_name],
+        }
       }
     }
   }
