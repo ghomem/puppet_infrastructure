@@ -64,6 +64,7 @@ define puppet_infrastructure::docker_container (
       ) |$n| { $n !~ /^\/|^\./ }
     )
 
+    # Create named volumes with exec to avoid docker_volume provider errors on the first run
     if $named_vols != [] {
       $named_vols.each |String $vol| {
         exec { "mkvol-${vol}":
