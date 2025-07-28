@@ -9,7 +9,6 @@ class puppet_infrastructure::node_base_desktop (
 ) {
 
   class { 'puppet_infrastructure::packages_base': unattended_upgrades => true }
-  include puppet_infrastructure::mcollective_node
   include puppet_infrastructure::ssh_secure
   class { 'puppet_infrastructure::firewall_secure':
     strict_purge => $firewall_strict_purge,
