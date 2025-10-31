@@ -72,11 +72,10 @@ class puppet_infrastructure::node_base_desktop (
     }
   }
 
-  include ::ntp
-
   # Desktops run puppet directly
   service { 'puppet':
-    ensure => running,
-    enable => true,
+    ensure   => running,
+    enable   => true,
+    provider => systemd,
   }
 }
