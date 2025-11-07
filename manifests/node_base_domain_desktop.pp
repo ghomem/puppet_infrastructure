@@ -7,7 +7,6 @@ class puppet_infrastructure::node_base_domain_desktop (
 ) {
 
   class { 'puppet_infrastructure::packages_base': unattended_upgrades => true }
-  include puppet_infrastructure::mcollective_node
   class { 'puppet_infrastructure::ssh_secure': password_authentication => true }
   include puppet_infrastructure::firewall_secure
   include puppet_infrastructure::firewall_ipv6_drop

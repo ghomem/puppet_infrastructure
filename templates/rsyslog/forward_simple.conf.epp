@@ -1,0 +1,24 @@
+<%- |
+  String          $target,
+  Integer         $port,
+  String          $certname,
+  Boolean         $check_names,
+  Optional[String] $failover = undef
+| -%>
+# forward everything over TLS
+$DefaultNetstreamDriver          gtls
+$DefaultNetstreamDriverCAFile    /etc/rsyslog.d/tls/ca.pem
+$DefaultNetstreamDriverCertFile  /etc/rsyslog.d/tls/<%= $certname %>.pem
+$DefaultNetstreamDriverKeyFile   /etc/rsyslog.d/tls/<%= $certname %>.key
+$ActionSendStreamDriverMode      1
+$ActionSendStreamDriverAuthMode  <%= $check_names ? { true => 'x509/name', default => 'x509/certvalid' } %>
+<% if $check_names { -%>
+$ActionSendStreamDriverPermittedPeer <%= $target %>
+<% } -%>
+
+*.*  @@<%= $target %>:<%= $port %>
+<% if $failover { -%>
+$ActionExecOnlyWhenPreviousIsSuspended on
+*.*  @@<%= $failover %>:<%= $port %>
+$ActionExecOnlyWhenPreviousIsSuspended off
+<% } -%>
