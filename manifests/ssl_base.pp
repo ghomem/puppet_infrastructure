@@ -93,7 +93,7 @@ define puppet_infrastructure::ssl_base (
 
   # If the service is not one of the “known” ones, log a warning rather than fail.
     unless $myservice in ['nginx','postfix'] {
-    notify { 'WARNING: puppet_infrastructure::ssl_base: Externally managed service "${myservice}" will be notified.': withpath => false }
+    notify { "WARNING: puppet_infrastructure::ssl_base: Externally managed service ${myservice} will be notified.": withpath => false }
   }
 
   # Always do the bundling
