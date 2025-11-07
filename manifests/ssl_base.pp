@@ -44,10 +44,10 @@ define puppet_infrastructure::ssl_base (
   Boolean $letsencrypt_certificate = false,
 
   # This argument defines the owner of the resulting files
-  String owner = 'root',
+  String $owner = 'root',
 
   # This argument defines the group of the result files
-  String group = 'root',
+  String $group = 'root',
 ) {
 
   # Notice we do not manage the '/etc/ssl/private/' directory here
