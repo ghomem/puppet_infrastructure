@@ -9,17 +9,28 @@ class puppet_infrastructure::letsencrypt_base (
   Integer $deploy_cron_hour           = 5,
   Integer $deploy_cron_minute         = 0,
   Array[Integer] $renew_cron_monthday = [5,10,15,20,25],
-  Enum['digitalocean', 'hetzner'] $provider,
+  Enum['digitalocean', 'hetzner', 'hetzner-cloud'] $provider,
 ){
 
   if $provider == 'digitalocean' {
     $package_name     = 'python3-certbot-dns-digitalocean'
     $package_provider = 'apt'
+    $ensure_value     = 'installed'
     $api_property_str = 'dns_digitalocean_token'
     $required_packages = []
   } else {
+
+    # hetzner-cloud is the new Hetzner Cloud API
+    # the fallback behaviour is the old Hetzner DNS service
+    if $provider == 'hetzner-cloud' {
+      $package_version = '3.0.0'
+    } else {
+      $package_version = '2.0.0'
+    }
+
     $package_name     = 'certbot-dns-hetzner'
     $package_provider = 'pip'
+    $ensure_value     = $package_version
     $api_property_str = 'dns_hetzner_api_token'
     $required_packages = ['Package[python3 pip]']
 
@@ -29,12 +40,13 @@ class puppet_infrastructure::letsencrypt_base (
       ensure   => 'installed',
       provider => 'apt',
     }
+
   }
 
   # letsencrypt plugin
   package { 'letsencrypt plugin':
     name     => $package_name,
-    ensure   => 'installed',
+    ensure   => $ensure_value,
     provider => $package_provider,
     require  => $required_packages,
   }
