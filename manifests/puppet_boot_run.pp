@@ -3,7 +3,7 @@
 # to execute a puppet run in the boot sequence
 # this need is expposed here: https://bitbucket.org/asolidodev/puppet_infrastructure/issues/287/make-sure-that-there-is-a-puppet-run-on
 
- class puppet_infrastructure::puppet_boot_run(){
+class puppet_infrastructure::puppet_boot_run(){
 
     $localbindir = lookup('filesystem::bindir')
     $boot_run_script = "${localbindir}/puppet_boot_run.sh"
@@ -21,16 +21,22 @@
         owner   => 'root',
         group   => 'root',
         content => template('puppet_infrastructure/etc/puppet_boot_run.service.erb'),
-        notify  => Exec[ 'Reload Systemctl Daemon for puppet boot run' ]
+        notify  => Exec[ 'Reload systemd' ]
     }
 
-    exec { 'Reload Systemctl Daemon for puppet boot run' :
+    exec { 'Reload systemd' :
         name        => '/bin/systemctl daemon-reload',
         refreshonly => true,
     }
 
     service { 'puppet_boot_run':
-        enable => true
+        ensure   => running,
+        enable   => true,
+        provider => 'systemd',
+        require  => [
+            File['/etc/systemd/system/puppet_boot_run.service'],
+            Exec['Reload systemd'],
+        ],
     }
 
 }
