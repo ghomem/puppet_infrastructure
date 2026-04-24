@@ -37,7 +37,9 @@ class puppet_infrastructure::filesystem_apt (
                          'coreutils', 'gzip', 'less', 'multitail',
                          'util-linux', 'openvpn',
                          'nginx-core', 'nginx-extras',
-                         'postfix', 'dovecot-core',]
+                         'postfix', 'dovecot-core',
+                         'rsyslog', 'rsyslog-gnutls', ]
+
   $apt_surface_desktop = ['openssh-server', 'openssh-client', 'openssh-sftp-server',
                           'openssl', 'libssl1.1',
                           'libudev1', 'ca-certificates',
