@@ -1,0 +1,14 @@
+<%- | String $log_root, Integer $active_days | -%>
+<%= $log_root %>/hosts/*/*.log {
+    daily
+    minage <%= $active_days %>
+    dateext
+    dateformat -%Y%m%d
+    compress
+    missingok
+    notifempty
+    sharedscripts
+    postrotate
+        /bin/systemctl kill -s HUP rsyslog.service >/dev/null 2>&1 || true
+    endscript
+}
