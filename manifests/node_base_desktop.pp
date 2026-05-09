@@ -13,6 +13,11 @@ class puppet_infrastructure::node_base_desktop (
   Boolean $firewall_strict_purge              = true,
   Array[String] $firewall_ignore_patterns     = [],
 
+  # SSH policy
+  Boolean $password_authentication            = false,
+  Boolean $ssh_allow_root_login               = false,
+  Integer $ssh_port                           = 22,
+
   # logging target, required for desktops that should ship logs
   String  $log_target,
   Optional[String] $log_target_ip             = undef,
@@ -37,7 +42,11 @@ class puppet_infrastructure::node_base_desktop (
     unattended_upgrades => false,
   }
 
-  include puppet_infrastructure::ssh_secure
+  class { 'puppet_infrastructure::ssh_secure':
+    password_authentication => $password_authentication,
+    root_login              => $ssh_allow_root_login,
+    port                    => $ssh_port,
+  }
 
   class { 'puppet_infrastructure::filesystem_base_desktop':
     customize_syslog_mode => $customize_syslog_mode,
