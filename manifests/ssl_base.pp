@@ -42,6 +42,12 @@ define puppet_infrastructure::ssl_base (
   # This argument defines whether we are using a letsencrypt certificate or not
   # as their certificate termination differs from our self managed certificates
   Boolean $letsencrypt_certificate = false,
+
+  # This argument defines the owner of the resulting files
+  String $owner = 'root',
+
+  # This argument defines the group of the result files
+  String $group = 'root',
 ) {
 
   # Notice we do not manage the '/etc/ssl/private/' directory here
@@ -80,14 +86,14 @@ define puppet_infrastructure::ssl_base (
     ensure => present,
     notify => Service[$myservicename],
     mode   => '0600',
-    owner  => 'root',
-    group  => 'root',
+    owner  => $owner,
+    group  => $group,
     source => $key_source,
   }
 
   # If the service is not one of the “known” ones, log a warning rather than fail.
     unless $myservice in ['nginx','postfix'] {
-    notify { 'WARNING: puppet_infrastructure::ssl_base: Externally managed service "${myservice}" will be notified.': withpath => false }
+    notify { "WARNING: puppet_infrastructure::ssl_base ${myprefix}: Externally managed service ${myservice} will be notified.": withpath => false }
   }
 
   # Always do the bundling
@@ -95,8 +101,8 @@ define puppet_infrastructure::ssl_base (
     ensure         => present,
     notify         => Service[$myservicename],
     mode           => '0644',
-    owner          => 'root',
-    group          => 'root',
+    owner          => $owner,
+    group          => $group,
     ensure_newline => true,
   }
 
