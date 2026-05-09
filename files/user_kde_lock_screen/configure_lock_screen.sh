@@ -36,6 +36,24 @@ else
 	export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${UID}/bus"
 fi
 
+# Check-only mode for Puppet idempotency.
+# Exit 0 when no change is needed; exit 1 when Puppet should run the script.
+if [ "${3:-}" = "--check" ]; then
+	CURRENT_AUTOLOCK_VALUE=`${KREADCONFIG} --file ${HOME}/.config/kscreenlockerrc --group Daemon --key Autolock`
+	CURRENT_LOCK_ON_RESUME=`${KREADCONFIG} --file ${HOME}/.config/kscreenlockerrc --group Daemon --key LockOnResume`
+	CURRENT_LOCK_TIMEOUT=`${KREADCONFIG} --file ${HOME}/.config/kscreenlockerrc --group Daemon --key Timeout`
+	CURRENT_LOCK_GRACE=`${KREADCONFIG} --file ${HOME}/.config/kscreenlockerrc --group Daemon --key LockGrace`
+
+	if [ "${CURRENT_AUTOLOCK_VALUE}" = 'true' ] && \
+	   [ "${CURRENT_LOCK_ON_RESUME}" = 'true' ] && \
+	   [ "${CURRENT_LOCK_TIMEOUT}" = "${LOCK_TIMEOUT}" ] && \
+	   [ "${CURRENT_LOCK_GRACE}" = "${LOCK_GRACE}" ]; then
+		exit 0
+	fi
+
+	exit 1
+fi
+
 
 # Take note if we must call the screenlocker config via dbus once we have adjusted the settings
 MUST_CONFIG_SCREENLOCKER=false

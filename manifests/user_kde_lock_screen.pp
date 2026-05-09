@@ -9,8 +9,10 @@ define puppet_infrastructure::user_kde_lock_screen(Integer $mytimeout = 5, Integ
   $bindir = lookup('filesystem::bindir')
 
   exec { "configure_lock_screen.sh ${myusername}" :
-    command  => "${bindir}/configure_lock_screen.sh ${mytimeout} ${mylockgrace}",
-    user     => $myusername,
+    command => "${bindir}/configure_lock_screen.sh ${mytimeout} ${mylockgrace}",
+    user    => $myusername,
+    require => File["${bindir}/configure_lock_screen.sh"],
+    unless  => "${bindir}/configure_lock_screen.sh ${mytimeout} ${mylockgrace} --check",
   }
 
 }
