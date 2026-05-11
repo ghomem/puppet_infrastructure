@@ -96,6 +96,26 @@ NODECONF=/etc/puppetlabs/puppet/puppet.conf
 PUPPETBIN=/opt/puppetlabs/bin/puppet
 
 ###############################################################################
+# ENSURE PERL IS INSTALLED
+###############################################################################
+
+if ! command -v perl &> /dev/null; then
+    print_status "Perl could not be found. Installing Perl..."
+    run_cmd "apt-get update" "Failed to update apt-get"
+    run_cmd "apt-get install -y perl" "Failed to install Perl"
+else
+    print_status "Perl is already installed."
+fi
+
+###############################################################################
+#  FIX SUDOERS SECURE_PATH
+###############################################################################
+
+print_status "Backing up /etc/sudoers and fixing secure_path..."
+run_cmd "cp -f /etc/sudoers /etc/sudoers.orig" "Failed to backup /etc/sudoers"
+perl -pi -e 's/^(Defaults\s*secure_path\s?=\s?\"?[^\"\n]*)(\"?)$/$1:\/opt\/puppetlabs\/bin$2/' /etc/sudoers
+
+###############################################################################
 # SET HOSTNAME
 ###############################################################################
 
