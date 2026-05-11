@@ -157,7 +157,11 @@ run_cmd "echo 'deb [trusted=yes] http://apt.puppetlabs.com bionic puppet5' \
 # Now apt won't check any signature for the puppet5 repo
 run_cmd "apt-get update" "Failed to update apt-get after puppet5 repo added"
 
-run_cmd "apt-get install -t bionic -y puppet-agent" "Failed to install Puppet agent"
+PUPPET_AGENT_VERSION="5.5.22-1bionic"
+run_cmd "apt-mark unhold puppet-agent 2>/dev/null || true" "Failed to unhold Puppet agent package"
+run_cmd "apt-get install -y --allow-downgrades puppet-agent=${PUPPET_AGENT_VERSION}" "Failed to install Puppet agent"
+run_cmd "apt-mark hold puppet-agent" "Failed to hold Puppet agent package"
+run_cmd "test -x $PUPPETBIN" "Expected Puppet binary not found at $PUPPETBIN"
 
 ###############################################################################
 # CONFIGURE PUPPET AGENT (puppet.conf) & START SERVICE
