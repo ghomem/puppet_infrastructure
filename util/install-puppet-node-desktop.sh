@@ -179,16 +179,9 @@ factpath=\$vardir/lib/facter
 EOL
 handle_error $? "Failed to create puppet.conf"
 
-print_status "Starting Puppet service..."
-run_cmd "$PUPPETBIN resource service puppet ensure=running enable=true provider=systemd" "Failed to start Puppet service"
-
-if [ "x$START" = "xyes" ]; then
-    run_cmd "systemctl enable puppet" "Failed to enable Puppet service"
-    run_cmd "systemctl start puppet"  "Failed to start Puppet service"
-else
-    run_cmd "systemctl disable puppet" "Failed to disable Puppet service"
-    run_cmd "systemctl stop puppet"    "Failed to stop Puppet service"
-fi
+print_status "Ensuring Puppet service is stopped during certificate bootstrap..."
+run_cmd "systemctl stop puppet 2>/dev/null || true" "Failed to stop Puppet service"
+run_cmd "systemctl disable puppet 2>/dev/null || true" "Failed to disable Puppet service"
 
 ###############################################################################
 # CERTIFICATE REQUEST & FIRST RUN
@@ -238,6 +231,16 @@ if [ $rc -eq 0 ] || [ $rc -eq 2 ] || [ $rc -eq 4 ] || [ $rc -eq 6 ]; then
 else
     print_error "Puppet agent failed with exit code $rc. Try to run it manually with 'sudo puppet agent -t'"
     exit $rc
+fi
+
+if [ "x$START" = "xyes" ]; then
+    print_status "Enabling and starting Puppet service..."
+    run_cmd "systemctl enable puppet" "Failed to enable Puppet service"
+    run_cmd "systemctl start puppet"  "Failed to start Puppet service"
+else
+    print_status "Leaving Puppet service disabled."
+    run_cmd "systemctl disable puppet" "Failed to disable Puppet service"
+    run_cmd "systemctl stop puppet 2>/dev/null || true" "Failed to stop Puppet service"
 fi
 
 print_status "Puppet node setup completed successfully."
