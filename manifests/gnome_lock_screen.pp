@@ -2,9 +2,12 @@
 #
 # This is intended for Ubuntu/GNOME desktops.
 class puppet_infrastructure::gnome_lock_screen (
-  Integer $idle_delay_seconds = 300,
-  Integer $lock_delay_seconds = 0,
+  Integer $screenlock_timeout_minutes = 5,
+  Integer $screenlock_grace_minutes   = 0,
 ) {
+
+  $screenlock_timeout_seconds = $screenlock_timeout_minutes * 60
+  $screenlock_grace_seconds   = $screenlock_grace_minutes * 60
 
   package { 'dconf-cli':
     ensure => installed,
@@ -65,11 +68,11 @@ class puppet_infrastructure::gnome_lock_screen (
     mode    => '0644',
     content => @("DCONF"/L),
       [org/gnome/desktop/session]
-      idle-delay=uint32 ${idle_delay_seconds}
+      idle-delay=uint32 ${screenlock_timeout_seconds}
 
       [org/gnome/desktop/screensaver]
       lock-enabled=true
-      lock-delay=uint32 ${lock_delay_seconds}
+      lock-delay=uint32 ${screenlock_grace_seconds}
       | DCONF
     require => File['/etc/dconf/db/local.d'],
     notify  => Exec['dconf_update_screenlock'],
