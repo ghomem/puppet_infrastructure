@@ -58,7 +58,7 @@ class puppet_infrastructure::node_base_desktop (
     ignore_patterns => $firewall_ignore_patterns,
   }
 
-  include puppet_infrastructure::firewall_ipv6_drop_policy
+  include puppet_infrastructure::firewall_ipv6_drop_policy_desktop
 
   # Make the firewall baseline dependency explicit.
   Class['puppet_infrastructure::packages_base'] -> Class['puppet_infrastructure::firewall_secure']

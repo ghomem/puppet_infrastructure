@@ -95,7 +95,12 @@ if [ "${CURRENT_LOCK_GRACE}" != "${LOCK_GRACE}" ]; then
 	MUST_CONFIG_SCREENLOCKER=true
 fi
 
-# Configure the screenlocker via dbus if needed
+# Configure the screenlocker via dbus if needed.
+# During bootstrap, SSH-only runs, or early login/session timing, the KDE
+# screensaver DBus service may not exist yet. The file settings above are still
+# valid, so do not fail Puppet only because the live reload could not run.
 if ${MUST_CONFIG_SCREENLOCKER}; then
-	qdbus org.kde.screensaver /ScreenSaver configure
+	qdbus org.kde.screensaver /ScreenSaver configure || {
+		logger -p local1.notice -t $SYSLOG_TAG "KDE screensaver DBus service unavailable; screenlock settings file updated but live reload skipped"
+	}
 fi
