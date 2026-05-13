@@ -3,7 +3,7 @@
 
 define puppet_infrastructure::user_kde_lock_screen(
   Integer $screenlock_timeout_minutes = 5,
-  Integer $screenlock_grace_minutes   = 0,
+  Integer $screenlock_grace_seconds   = 0,
 ) {
 
   include puppet_infrastructure::user_kde_lock_screen_common
@@ -12,10 +12,10 @@ define puppet_infrastructure::user_kde_lock_screen(
   $bindir = lookup('filesystem::bindir')
 
   exec { "configure_lock_screen.sh ${myusername}" :
-    command => "${bindir}/configure_lock_screen.sh ${screenlock_timeout_minutes} ${screenlock_grace_minutes}",
+    command => "${bindir}/configure_lock_screen.sh ${screenlock_timeout_minutes} ${screenlock_grace_seconds}",
     user    => $myusername,
     require => File["${bindir}/configure_lock_screen.sh"],
-    unless  => "${bindir}/configure_lock_screen.sh ${screenlock_timeout_minutes} ${screenlock_grace_minutes} --check",
+    unless  => "${bindir}/configure_lock_screen.sh ${screenlock_timeout_minutes} ${screenlock_grace_seconds} --check",
   }
 
 }

@@ -3,11 +3,10 @@
 # This is intended for Ubuntu/GNOME desktops.
 class puppet_infrastructure::gnome_lock_screen (
   Integer $screenlock_timeout_minutes = 5,
-  Integer $screenlock_grace_minutes   = 0,
+  Integer $screenlock_grace_seconds   = 0,
 ) {
 
   $screenlock_timeout_seconds = $screenlock_timeout_minutes * 60
-  $screenlock_grace_seconds   = $screenlock_grace_minutes * 60
 
   package { 'dconf-cli':
     ensure => installed,
