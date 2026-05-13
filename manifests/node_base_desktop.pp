@@ -27,12 +27,10 @@ class puppet_infrastructure::node_base_desktop (
   # KDE screen lock, per desktop user
   Array[String] $screenlock_users             = [],
   Integer $screenlock_timeout_minutes         = 5,
-  Integer $screenlock_grace_minutes           = 0,
+  Integer $screenlock_grace_seconds           = 0,
 
   # GNOME screen lock, system-wide dconf policy
   Boolean $manage_gnome_screenlock            = false,
-  Integer $gnome_screenlock_idle_delay_seconds = 300,
-  Integer $gnome_screenlock_lock_delay_seconds = 0,
 ) {
 
   # Base packages are intentionally part of the desktop baseline.
@@ -89,16 +87,16 @@ class puppet_infrastructure::node_base_desktop (
   # KDE lock screen policy is per user.
   $screenlock_users.each |String $u| {
     puppet_infrastructure::user_kde_lock_screen { $u:
-      mytimeout   => $screenlock_timeout_minutes,
-      mylockgrace => $screenlock_grace_minutes,
+      screenlock_timeout_minutes => $screenlock_timeout_minutes,
+      screenlock_grace_seconds   => $screenlock_grace_seconds,
     }
   }
 
   # GNOME lock screen policy is system-wide.
   if $manage_gnome_screenlock {
     class { 'puppet_infrastructure::gnome_lock_screen':
-      idle_delay_seconds => $gnome_screenlock_idle_delay_seconds,
-      lock_delay_seconds => $gnome_screenlock_lock_delay_seconds,
+      screenlock_timeout_minutes => $screenlock_timeout_minutes,
+      screenlock_grace_seconds   => $screenlock_grace_seconds,
     }
   }
 
