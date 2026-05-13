@@ -3,7 +3,8 @@
   Integer         $port,
   String          $certname,
   Boolean         $check_names,
-  Optional[String] $failover = undef
+  Optional[String] $failover          = undef,
+  Boolean          $forward_auth_log  = false
 | -%>
 # forward everything over TLS
 $DefaultNetstreamDriver          gtls
@@ -21,4 +22,15 @@ $ActionSendStreamDriverPermittedPeer <%= $target %>
 $ActionExecOnlyWhenPreviousIsSuspended on
 *.*  @@<%= $failover %>:<%= $port %>
 $ActionExecOnlyWhenPreviousIsSuspended off
+<% } -%>
+<% if $forward_auth_log { -%>
+
+# Read auth.log directly to capture early-boot session events that imjournal misses.
+module(load="imfile")
+input(type="imfile"
+      File="/var/log/auth.log"
+      Tag="auth"
+      StateFile="/var/lib/rsyslog/imfile-auth.state"
+      Facility="auth"
+      Severity="info")
 <% } -%>
