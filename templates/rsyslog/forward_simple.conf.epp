@@ -70,6 +70,9 @@ input(
     Facility="auth"
     Severity="info"
     PersistStateInterval="100"
+    reopenOnTruncate="on"
+    deleteStateOnFileDelete="on"
+    deleteStateOnFileMove="on"
     ruleset="forward_authlog_only"
 )
 <% } -%>
