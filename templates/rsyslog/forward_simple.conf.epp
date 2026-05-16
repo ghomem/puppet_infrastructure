@@ -1,9 +1,10 @@
 <%- |
-  String          $target,
-  Integer         $port,
-  String          $certname,
-  Boolean         $check_names,
-  Optional[String] $failover = undef
+  String            $target,
+  Integer           $port,
+  String            $certname,
+  Boolean           $check_names,
+  Optional[String]  $failover         = undef,
+  Boolean           $forward_auth_log = false
 | -%>
 # forward everything over TLS
 $DefaultNetstreamDriver          gtls
@@ -21,4 +22,57 @@ $ActionSendStreamDriverPermittedPeer <%= $target %>
 $ActionExecOnlyWhenPreviousIsSuspended on
 *.*  @@<%= $failover %>:<%= $port %>
 $ActionExecOnlyWhenPreviousIsSuspended off
+<% } -%>
+<% if $forward_auth_log { -%>
+
+# Read auth.log directly and bind it to a forwarding-only ruleset so it does not
+# re-enter the normal local auth logging pipeline.
+ruleset(name="forward_authlog_only") {
+    action(
+        type="omfwd"
+        target="<%= $target %>"
+        port="<%= $port %>"
+        protocol="tcp"
+        StreamDriver="gtls"
+        StreamDriverMode="1"
+        StreamDriverAuthMode="<%= $check_names ? { true => 'x509/name', default => 'x509/certvalid' } %>"
+<% if $check_names { -%>
+        StreamDriverPermittedPeers="<%= $target %>"
+<% } -%>
+        queue.type="linkedList"
+        queue.size="1000"
+    )
+<% if $failover { -%>
+    action(
+        type="omfwd"
+        target="<%= $failover %>"
+        port="<%= $port %>"
+        protocol="tcp"
+        StreamDriver="gtls"
+        StreamDriverMode="1"
+        StreamDriverAuthMode="<%= $check_names ? { true => 'x509/name', default => 'x509/certvalid' } %>"
+<% if $check_names { -%>
+        StreamDriverPermittedPeers="<%= $failover %>"
+<% } -%>
+        action.execOnlyWhenPreviousIsSuspended="on"
+        queue.type="linkedList"
+        queue.size="1000"
+    )
+<% } -%>
+    stop
+}
+
+module(load="imfile")
+input(
+    type="imfile"
+    File="/var/log/auth.log"
+    Tag="auth"
+    Facility="auth"
+    Severity="info"
+    PersistStateInterval="100"
+    reopenOnTruncate="on"
+    deleteStateOnFileDelete="on"
+    deleteStateOnFileMove="on"
+    ruleset="forward_authlog_only"
+)
 <% } -%>
