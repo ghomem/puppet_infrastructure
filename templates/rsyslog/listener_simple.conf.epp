@@ -1,4 +1,4 @@
-<%- | Integer $port, String $certname, String $log_root | -%>
+<%- | Integer $port, String $certname, String $log_root, Integer $max_sessions, Boolean $notify_on_connection_close | -%>
 # TLS listener
 module(load="imtcp")
 global(
@@ -10,6 +10,8 @@ global(
 input(
   type="imtcp"
   port="<%= $port %>"
+  maxSessions="<%= $max_sessions %>"
+  notifyOnConnectionClose="<%= $notify_on_connection_close ? { true => 'on', default => 'off' } %>"
   streamdriver.mode="1"
   streamdriver.authMode="x509/certvalid"   # accept any cert signed by CA
 )
