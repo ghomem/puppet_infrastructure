@@ -36,6 +36,24 @@ else
 	export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${UID}/bus"
 fi
 
+# Check-only mode for Puppet idempotency.
+# Exit 0 when no change is needed; exit 1 when Puppet should run the script.
+if [ "${3:-}" = "--check" ]; then
+	CURRENT_AUTOLOCK_VALUE=`${KREADCONFIG} --file ${HOME}/.config/kscreenlockerrc --group Daemon --key Autolock`
+	CURRENT_LOCK_ON_RESUME=`${KREADCONFIG} --file ${HOME}/.config/kscreenlockerrc --group Daemon --key LockOnResume`
+	CURRENT_LOCK_TIMEOUT=`${KREADCONFIG} --file ${HOME}/.config/kscreenlockerrc --group Daemon --key Timeout`
+	CURRENT_LOCK_GRACE=`${KREADCONFIG} --file ${HOME}/.config/kscreenlockerrc --group Daemon --key LockGrace`
+
+	if [ "${CURRENT_AUTOLOCK_VALUE}" = 'true' ] && \
+	   [ "${CURRENT_LOCK_ON_RESUME}" = 'true' ] && \
+	   [ "${CURRENT_LOCK_TIMEOUT}" = "${LOCK_TIMEOUT}" ] && \
+	   [ "${CURRENT_LOCK_GRACE}" = "${LOCK_GRACE}" ]; then
+		exit 0
+	fi
+
+	exit 1
+fi
+
 
 # Take note if we must call the screenlocker config via dbus once we have adjusted the settings
 MUST_CONFIG_SCREENLOCKER=false
@@ -77,7 +95,12 @@ if [ "${CURRENT_LOCK_GRACE}" != "${LOCK_GRACE}" ]; then
 	MUST_CONFIG_SCREENLOCKER=true
 fi
 
-# Configure the screenlocker via dbus if needed
+# Configure the screenlocker via dbus if needed.
+# During bootstrap, SSH-only runs, or early login/session timing, the KDE
+# screensaver DBus service may not exist yet. The file settings above are still
+# valid, so do not fail Puppet only because the live reload could not run.
 if ${MUST_CONFIG_SCREENLOCKER}; then
-	qdbus org.kde.screensaver /ScreenSaver configure
+	qdbus org.kde.screensaver /ScreenSaver configure || {
+		logger -p local1.notice -t $SYSLOG_TAG "KDE screensaver DBus service unavailable; screenlock settings file updated but live reload skipped"
+	}
 fi

@@ -9,8 +9,10 @@ define puppet_infrastructure::docker_container (
   $username = '',
   $token = '',
   $network = 'bridge',
-  $env = []
+  $env = [],
+  $volumes = [],
 ) {
+
   $registry_url = split($image, '/')[0]
   $img_name     = $image
 
@@ -53,11 +55,35 @@ define puppet_infrastructure::docker_container (
     $myapp_port = []
   }
 
+  if $volumes != [] {
+    # collect the bit before ':' and keep only entries that don't look
+    # like absolute/relative paths (i.e. are real named-volumes)
+    $named_vols = unique(
+      filter(
+        map($volumes) |$v| { split($v, ':')[0] }
+      ) |$n| { $n !~ /^\/|^\./ }
+    )
+
+    # Create named volumes with exec to avoid docker_volume provider errors on the first run
+    if $named_vols != [] {
+      $named_vols.each |String $vol| {
+        exec { "mkvol-${vol}":
+          command => "/usr/bin/docker volume create ${vol}",
+          unless  => "/usr/bin/docker volume inspect ${vol}",
+          path    => ['/usr/bin','/bin'],
+          require => Class['docker'],
+          before  => Docker::Run[$container_name],
+        }
+      }
+    }
+  }
+
   docker::run { $container_name:
     ensure                            => present,
     image                             => $image_id,
     env                               => $env,
     ports                             => $myapp_port,
+    volumes                           => $volumes,
     remove_container_on_stop          => false,
     restart_service_on_docker_refresh => true,
     net                               => $network,

@@ -1,0 +1,19 @@
+<%- | Integer $port, String $certname, String $log_root, Integer $max_sessions, Boolean $notify_on_connection_close | -%>
+# TLS listener
+module(load="imtcp")
+global(
+  DefaultNetstreamDriver="gtls"
+  DefaultNetstreamDriverCAFile="/etc/rsyslog.d/tls/ca.pem"
+  DefaultNetstreamDriverCertFile="/etc/rsyslog.d/tls/<%= $certname %>.pem"
+  DefaultNetstreamDriverKeyFile="/etc/rsyslog.d/tls/<%= $certname %>.key"
+)
+input(
+  type="imtcp"
+  port="<%= $port %>"
+  maxSessions="<%= $max_sessions %>"
+  notifyOnConnectionClose="<%= $notify_on_connection_close ? { true => 'on', default => 'off' } %>"
+  streamdriver.mode="1"
+  streamdriver.authMode="x509/certvalid"   # accept any cert signed by CA
+)
+template(name="remote" type="string" string="<%= $log_root %>/hosts/%HOSTNAME%/%PROGRAMNAME%.log")
+action(type="omfile" dynaFile="remote" createDirs="on")
