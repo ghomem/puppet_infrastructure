@@ -6,7 +6,6 @@
     dateformat -%Y%m%d
     compress
     missingok
-    notifempty
     sharedscripts
     postrotate
         /bin/systemctl kill -s HUP rsyslog.service >/dev/null 2>&1 || true
