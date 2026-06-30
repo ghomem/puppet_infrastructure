@@ -15,5 +15,22 @@ input(
   streamdriver.mode="1"
   streamdriver.authMode="x509/certvalid"   # accept any cert signed by CA
 )
-template(name="remote" type="string" string="<%= $log_root %>/hosts/%HOSTNAME%/%PROGRAMNAME%.log")
-action(type="omfile" dynaFile="remote" createDirs="on")
+template(name="remote" type="list") {
+  constant(value="<%= $log_root %>/hosts/")
+  property(name="hostname" securePath="replace")
+  constant(value="/")
+  property(name="programname" securePath="replace")
+  constant(value=".log")
+}
+
+template(name="remote_unknown_program" type="list") {
+  constant(value="<%= $log_root %>/hosts/")
+  property(name="hostname" securePath="replace")
+  constant(value="/unknown.log")
+}
+
+if ($programname == '') then {
+  action(type="omfile" dynaFile="remote_unknown_program" createDirs="on")
+} else {
+  action(type="omfile" dynaFile="remote" createDirs="on")
+}
