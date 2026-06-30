@@ -1,5 +1,5 @@
 <%- | String $log_root, Integer $active_days | -%>
-<%= $log_root %>/hosts/*/*.log {
+<%= $log_root %>/hosts/*/*.log <%= $log_root %>/hosts/*/.log {
     daily
     minage <%= $active_days %>
     dateext
