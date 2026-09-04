@@ -15,6 +15,7 @@ class puppet_infrastructure::rsyslog_server (
   include puppet_infrastructure::rsyslog_base
 
   $certname = $trusted['certname']
+  $bindir   = lookup('filesystem::bindir')
 
   # Render the TLS listener config and restart rsyslog if it changes.
   file { '/etc/rsyslog.d/30-listener.conf':
@@ -38,24 +39,37 @@ class puppet_infrastructure::rsyslog_server (
     notify => Service['rsyslog'],
   }
 
-  # Rotate active per-host log files after the configured active period.
+  # Rotate active per-host log files daily; clear-text retention is handled separately.
   file { '/etc/logrotate.d/rsyslog-hosts':
     ensure  => file,
     owner   => 'root',
     group   => 'root',
     mode    => '0644',
     content => epp('puppet_infrastructure/rsyslog/rsyslog-hosts.logrotate.epp', {
-      log_root    => $log_root,
-      active_days => $active_days,
+      log_root => $log_root,
     }),
   }
 
-  # Remove compressed rotated logs after the configured retention period.
+  # Compress rotated clear-text logs after the active period and remove
+  # compressed logs after the configured retention period.
+  file { "${bindir}/rsyslog-hosts-retention.sh":
+    ensure  => file,
+    owner   => 'root',
+    group   => 'root',
+    mode    => '0755',
+    content => epp('puppet_infrastructure/rsyslog/rsyslog-hosts-retention.sh.epp', {
+      log_root       => $log_root,
+      active_days    => $active_days,
+      retention_days => $retention_days,
+    }),
+  }
+
   cron { 'rsyslog_hosts_retention_cleanup':
-    command => "/usr/bin/find ${log_root}/hosts -type f -name '*.gz' -mtime +${retention_days} -delete",
+    command => "${bindir}/rsyslog-hosts-retention.sh",
     user    => 'root',
     hour    => '3',
     minute  => '17',
+    require => File["${bindir}/rsyslog-hosts-retention.sh"],
   }
 
 }
