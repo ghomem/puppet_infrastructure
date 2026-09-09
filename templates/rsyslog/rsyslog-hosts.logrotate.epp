@@ -1,10 +1,10 @@
-<%- | String $log_root, Integer $active_days | -%>
+<%- | String $log_root | -%>
 <%= $log_root %>/hosts/*/*.log <%= $log_root %>/hosts/*/.log {
     daily
-    minage <%= $active_days %>
+    rotate -1
+    nocompress
     dateext
     dateformat -%Y%m%d
-    compress
     missingok
     sharedscripts
     postrotate
