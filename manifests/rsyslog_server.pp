@@ -7,6 +7,10 @@ class puppet_infrastructure::rsyslog_server (
   String  $log_root                   = '/var/log',
   Integer $active_days                = 7,
   Integer $retention_days             = 7,
+  Integer[0, 23] $rotation_hour       = 0,
+  Integer[0, 59] $rotation_minute     = 0,
+  Integer[0, 23] $retention_hour      = 3,
+  Integer[0, 59] $retention_minute    = 17,
   Integer $max_sessions               = 2000,
   Boolean $notify_on_connection_close = false,
 ) {
@@ -39,6 +43,38 @@ class puppet_infrastructure::rsyslog_server (
     notify => Service['rsyslog'],
   }
 
+  # Run the system logrotate timer at the configured time.
+  file { '/etc/systemd/system/logrotate.timer.d':
+    ensure => directory,
+    owner  => 'root',
+    group  => 'root',
+    mode   => '0755',
+  }
+
+  file { '/etc/systemd/system/logrotate.timer.d/override.conf':
+    ensure  => file,
+    owner   => 'root',
+    group   => 'root',
+    mode    => '0644',
+    content => epp('puppet_infrastructure/rsyslog/logrotate.timer.override.epp', {
+      rotation_hour   => $rotation_hour,
+      rotation_minute => $rotation_minute,
+    }),
+    require => File['/etc/systemd/system/logrotate.timer.d'],
+    notify  => Exec['reload systemd for logrotate timer'],
+  }
+
+  exec { 'reload systemd for logrotate timer':
+    command     => '/bin/systemctl daemon-reload',
+    refreshonly => true,
+    notify      => Exec['restart logrotate timer'],
+  }
+
+  exec { 'restart logrotate timer':
+    command     => '/bin/systemctl restart logrotate.timer',
+    refreshonly => true,
+  }
+
   # Rotate active per-host log files daily; clear-text retention is handled separately.
   file { '/etc/logrotate.d/rsyslog-hosts':
     ensure  => file,
@@ -67,8 +103,8 @@ class puppet_infrastructure::rsyslog_server (
   cron { 'rsyslog_hosts_retention_cleanup':
     command => "${bindir}/rsyslog-hosts-retention.sh",
     user    => 'root',
-    hour    => '3',
-    minute  => '17',
+    hour    => $retention_hour,
+    minute  => $retention_minute,
     require => File["${bindir}/rsyslog-hosts-retention.sh"],
   }
 
