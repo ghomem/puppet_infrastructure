@@ -1,0 +1,11 @@
+<%- | String $data_dir, String $ssl_chain, String $ssl_key, String $ssl_cert | -%>
+# Managed by Puppet
+
+# MySQL data directory
+<%= $data_dir %>/ r,
+<%= $data_dir %>/** rwk,
+
+# MySQL TLS material
+/etc/ssl/certs/<%= $ssl_chain %> r,
+/etc/ssl/certs/<%= $ssl_cert %> r,
+/etc/ssl/private/<%= $ssl_key %> r,
