@@ -1,4 +1,4 @@
-node 'mysql-client01' {
+node 'mariadb-client01' {
 
   include puppet_infrastructure::node_base
   include passwd_common
