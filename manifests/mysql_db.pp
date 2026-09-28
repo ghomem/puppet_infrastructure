@@ -14,7 +14,7 @@ define puppet_infrastructure::mysql_db (
     fail('ro_user and ro_pass must either both be provided or both be omitted')
   }
 
-  mysql::db { $db_name:
+  mysql::db { "${db_name}-rw":
     dbname      => $db_name,
     user        => $rw_user,
     password    => $rw_pass,
@@ -25,22 +25,14 @@ define puppet_infrastructure::mysql_db (
   }
 
   if $ro_user and $ro_pass {
-    mysql_user { "${ro_user}@%":
-      ensure        => present,
-      password_hash => mysql::password($ro_pass),
-      tls_options   => ['SSL'],
-      require       => Mysql::Db[$db_name],
-    }
-
-    mysql_grant { "${ro_user}@%/${db_name}.*":
-      ensure     => present,
-      privileges => ['SELECT', 'SHOW VIEW'],
-      table      => "${db_name}.*",
-      user       => "${ro_user}@%",
-      require    => [
-        Mysql::Db[$db_name],
-        Mysql_user["${ro_user}@%"],
-      ],
+    mysql::db { "${db_name}-ro":
+      dbname      => $db_name,
+      user        => $ro_user,
+      password    => $ro_pass,
+      host        => '%',
+      grant       => ['SELECT', 'SHOW VIEW'],
+      tls_options => ['SSL'],
+      require     => Mysql::Db["${db_name}-rw"],
     }
   }
 }
