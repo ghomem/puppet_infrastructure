@@ -11,11 +11,12 @@ class puppet_infrastructure::mysql_server (
   $base_dir,
 ) {
 
-  $ssl_chain_file = "/etc/ssl/certs/${ssl_chain}"
-  $ssl_key_file   = "/etc/ssl/private/${ssl_key}"
-  $ssl_cert_file  = "/etc/ssl/certs/${ssl_cert}"
+  $ssl_dir        = '/etc/mysql/ssl'
+  $ssl_chain_file = "${ssl_dir}/${ssl_chain}"
+  $ssl_key_file   = "${ssl_dir}/${ssl_key}"
+  $ssl_cert_file  = "${ssl_dir}/${ssl_cert}"
   $data_dir       = "${base_dir}/mysql"
-  $config_file    = '/etc/mysql/mysql.conf.d/99-puppet-infrastructure.cnf'
+  $config_file    = '/etc/mysql/mysql.conf.d/zz-puppet-infrastructure.cnf'
 
   # Ubuntu confines mysqld with AppArmor. Put the exception in place before
   # the package is installed so its post-installation profile reload includes it.
@@ -32,10 +33,10 @@ class puppet_infrastructure::mysql_server (
     group   => 'root',
     mode    => '0644',
     content => epp('puppet_infrastructure/mysql/apparmor-local.epp', {
-      'data_dir'  => $data_dir,
-      'ssl_chain' => $ssl_chain,
-      'ssl_key'   => $ssl_key,
-      'ssl_cert'  => $ssl_cert,
+      'data_dir'       => $data_dir,
+      'ssl_chain_file' => $ssl_chain_file,
+      'ssl_key_file'   => $ssl_key_file,
+      'ssl_cert_file'  => $ssl_cert_file,
     }),
     require => File['/etc/apparmor.d/local'],
   }
@@ -60,31 +61,39 @@ class puppet_infrastructure::mysql_server (
   File['/etc/apparmor.d/local/usr.sbin.mysqld']
     -> Package['mysql-server']
 
+  file { $ssl_dir:
+    ensure  => directory,
+    owner   => 'root',
+    group   => 'mysql',
+    mode    => '0750',
+    require => Package['mysql-server'],
+  }
+
   file { $ssl_chain_file:
     ensure  => file,
     source  => "puppet:///extra_files/ssl/${ssl_chain}",
     owner   => 'root',
-    group   => 'root',
+    group   => 'mysql',
     mode    => '0644',
-    require => Package['mysql-server'],
+    require => File[$ssl_dir],
   }
 
   file { $ssl_cert_file:
     ensure  => file,
     source  => "puppet:///extra_files/ssl/${ssl_cert}",
     owner   => 'root',
-    group   => 'root',
+    group   => 'mysql',
     mode    => '0644',
-    require => Package['mysql-server'],
+    require => File[$ssl_dir],
   }
 
   file { $ssl_key_file:
     ensure  => file,
     source  => "puppet:///extra_files/ssl/${ssl_key}",
-    owner   => 'mysql',
+    owner   => 'root',
     group   => 'mysql',
-    mode    => '0600',
-    require => Package['mysql-server'],
+    mode    => '0640',
+    require => File[$ssl_dir],
   }
 
   exec { 'reload mysql apparmor profile':
