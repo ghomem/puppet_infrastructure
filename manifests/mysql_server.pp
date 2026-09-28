@@ -15,27 +15,10 @@ class puppet_infrastructure::mysql_server (
   $ssl_key_file   = "/etc/ssl/private/${ssl_key}"
   $ssl_cert_file  = "/etc/ssl/certs/${ssl_cert}"
   $data_dir       = "${base_dir}/mysql"
+  $config_file    = '/etc/mysql/mysql.conf.d/99-puppet-infrastructure.cnf'
 
-  # The MySQL account is normally created by the Ubuntu package. We create it
-  # beforehand because the TLS private key must already have secure ownership
-  # when the package starts MySQL for the first time.
-  group { 'mysql':
-    ensure => present,
-    system => true,
-  }
-
-  user { 'mysql':
-    ensure     => present,
-    system     => true,
-    gid        => 'mysql',
-    home       => '/nonexistent',
-    managehome => false,
-    shell      => '/bin/false',
-    require    => Group['mysql'],
-  }
-
-  # Ubuntu confines mysqld with AppArmor. Allow the configured data directory
-  # and TLS material before MySQL is installed and started.
+  # Ubuntu confines mysqld with AppArmor. Put the exception in place before
+  # the package is installed so its post-installation profile reload includes it.
   file { '/etc/apparmor.d/local':
     ensure => directory,
     owner  => 'root',
@@ -57,13 +40,33 @@ class puppet_infrastructure::mysql_server (
     require => File['/etc/apparmor.d/local'],
   }
 
+  # Let the Ubuntu package install and initialize its default environment
+  # before enabling the custom datadir configuration. puppetlabs-mysql will
+  # initialize $data_dir after the package is installed.
+  class { '::mysql::server':
+    package_name            => "mysql-server-${version}",
+    package_ensure          => 'present',
+    root_password           => $root_pw,
+    remove_default_accounts => true,
+    manage_config_file      => false,
+    restart                 => false,
+    override_options        => {
+      'mysqld' => {
+        'datadir' => $data_dir,
+      },
+    },
+  }
+
+  File['/etc/apparmor.d/local/usr.sbin.mysqld']
+    -> Package['mysql-server']
+
   file { $ssl_chain_file:
     ensure  => file,
     source  => "puppet:///extra_files/ssl/${ssl_chain}",
     owner   => 'root',
     group   => 'root',
     mode    => '0644',
-    require => User['mysql'],
+    require => Package['mysql-server'],
   }
 
   file { $ssl_cert_file:
@@ -72,7 +75,7 @@ class puppet_infrastructure::mysql_server (
     owner   => 'root',
     group   => 'root',
     mode    => '0644',
-    require => User['mysql'],
+    require => Package['mysql-server'],
   }
 
   file { $ssl_key_file:
@@ -81,40 +84,39 @@ class puppet_infrastructure::mysql_server (
     owner   => 'mysql',
     group   => 'mysql',
     mode    => '0600',
-    require => User['mysql'],
+    require => Package['mysql-server'],
   }
 
-  # Reload the profile before applying MySQL configuration changes.
   exec { 'reload mysql apparmor profile':
     command     => '/usr/sbin/apparmor_parser -r /etc/apparmor.d/usr.sbin.mysqld',
     refreshonly => true,
     subscribe   => File['/etc/apparmor.d/local/usr.sbin.mysqld'],
+    require     => Package['mysql-server'],
     onlyif      => '/usr/bin/test -f /etc/apparmor.d/usr.sbin.mysqld',
   }
 
-  class { '::mysql::server':
-    package_name            => "mysql-server-${version}",
-    package_ensure          => 'present',
-    root_password           => $root_pw,
-    remove_default_accounts => true,
-    restart                 => true,
-    override_options        => {
-      'mysqld' => {
-        'bind-address'             => '0.0.0.0',
-        'datadir'                  => $data_dir,
-        'ssl-ca'                   => $ssl_chain_file,
-        'ssl-cert'                 => $ssl_cert_file,
-        'ssl-key'                  => $ssl_key_file,
-        'require_secure_transport' => 'ON',
-      },
-    },
+  # Apply our runtime settings only after puppetlabs-mysql has initialized
+  # the custom data directory.
+  file { $config_file:
+    ensure  => file,
+    owner   => 'root',
+    group   => 'root',
+    mode    => '0644',
+    content => epp('puppet_infrastructure/mysql/server.cnf.epp', {
+      'data_dir'       => $data_dir,
+      'ssl_chain_file' => $ssl_chain_file,
+      'ssl_key_file'   => $ssl_key_file,
+      'ssl_cert_file'  => $ssl_cert_file,
+    }),
     require => [
-      File['/etc/apparmor.d/local/usr.sbin.mysqld'],
+      Mysql_datadir[$data_dir],
       File[$ssl_chain_file],
       File[$ssl_cert_file],
       File[$ssl_key_file],
       Exec['reload mysql apparmor profile'],
     ],
+    notify => Service['mysqld'],
   }
 
+  File[$config_file] -> Service['mysqld']
 }
