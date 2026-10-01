@@ -6,7 +6,7 @@ node 'mariadb-server01' {
   include puppet_infrastructure::node_base
   include passwd_common
 
-  # To make the variable below works, add this line to 
+  # To make the variable below works, add this line to
   # /etc/puppetlabs/code/environments/production/data/common.yaml:
   #
   # db::mariadb::root_pw: 'Insert here a strong password for the root user'

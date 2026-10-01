@@ -11,8 +11,8 @@
 #
 # Those users can only connect using ssl (ex: --ssl flag on the command line)
 #
-# Notes: 
-# 
+# Notes:
+#
 # https://mariadb.com/kb/en/secure-connections-overview/
 # https://mariadb.com/kb/en/authentication-plugin-ed25519/
 # SELECT user,host,password,authentication_string,plugin FROM mysql.user;
@@ -30,7 +30,7 @@ class puppet_infrastructure::mariadb_server (
   $ro_user = undef,
   $ro_hash = undef,
   $custom_mysqld_configs = {},
-  $custom_mariadb_configs = {}, 
+  $custom_mariadb_configs = {},
   Boolean $generate_certificates = true,
 ) {
 
@@ -109,7 +109,7 @@ class puppet_infrastructure::mariadb_server (
         owner   => root,
         group   => root,
         mode    => '0644',
-        require => File[ $ssl_dir ] 
+        require => File[ $ssl_dir ]
       }
 
       file { "$ssl_dir/server-key.pem":
@@ -117,7 +117,7 @@ class puppet_infrastructure::mariadb_server (
         owner   => root,
         group   => root,
         mode    => '0644',
-        require => File[ $ssl_dir ] 
+        require => File[ $ssl_dir ]
       }
 
       file { "$ssl_dir/ca.pem":
@@ -125,7 +125,7 @@ class puppet_infrastructure::mariadb_server (
         owner   => root,
         group   => root,
         mode    => '0644',
-        require => File[ $ssl_dir ] 
+        require => File[ $ssl_dir ]
       }
 
   }
@@ -173,4 +173,3 @@ class puppet_infrastructure::mariadb_server (
     require => Package['mysql-server'],
   }
 }
-
