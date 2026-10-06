@@ -1,0 +1,11 @@
+<%- | String $data_dir, String $ssl_chain_file, String $ssl_key_file, String $ssl_cert_file | -%>
+# Managed by Puppet
+
+[mysqld]
+bind-address = 0.0.0.0
+datadir = <%= $data_dir %>
+
+ssl-ca = <%= $ssl_chain_file %>
+ssl-cert = <%= $ssl_cert_file %>
+ssl-key = <%= $ssl_key_file %>
+require_secure_transport = ON
