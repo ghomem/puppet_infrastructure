@@ -1,0 +1,5 @@
+<%- | Integer $rotation_hour, Integer $rotation_minute | -%>
+[Timer]
+OnCalendar=
+OnCalendar=*-*-* <%= sprintf('%02d', $rotation_hour) %>:<%= sprintf('%02d', $rotation_minute) %>:00
+AccuracySec=1min

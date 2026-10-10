@@ -1,0 +1,34 @@
+<%- | String $log_root, Integer $active_days, Integer $retention_days | -%>
+#!/bin/bash
+
+ROOT_DIR="<%= $log_root %>/hosts"
+ACTIVE_DAYS=<%= $active_days %>
+RETENTION_DAYS=<%= $retention_days %>
+
+[ -d "$ROOT_DIR" ] || exit 0
+
+# Rotated clear-text logs carry their rotation date in the filename.
+# Files older than this date will be compressed.
+OLDEST_ALLOWED_DATE_FOR_PLAIN_TEXT=$(date -d "$((ACTIVE_DAYS - 1)) days ago" +%Y%m%d)
+
+while IFS= read -r -d '' file; do
+    name=${file##*/}
+
+    if [[ $name =~ \.log-([0-9]{8})$ ]]; then
+        file_date=${BASH_REMATCH[1]}
+
+        if [[ $file_date < $OLDEST_ALLOWED_DATE_FOR_PLAIN_TEXT ]]; then
+            if gzip -- "$file"; then
+                # gzip preserves the source mtime; reset it so .gz age means
+                # time since compression.
+                touch -- "$file.gz"
+            fi
+        fi
+    fi
+done < <(find "$ROOT_DIR" -type f -name '*.log-????????' -print0)
+
+# Compressed retention is measured from compression time.
+find "$ROOT_DIR" \
+    -type f -name '*.gz' \
+    ! -newermt "${RETENTION_DAYS} days ago" \
+    -delete

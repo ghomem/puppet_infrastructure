@@ -11,6 +11,7 @@ define puppet_infrastructure::docker_container (
   $network = 'bridge',
   $env = [],
   $volumes = [],
+  $command = undef,
 ) {
 
   $registry_url = split($image, '/')[0]
@@ -84,6 +85,7 @@ define puppet_infrastructure::docker_container (
     env                               => $env,
     ports                             => $myapp_port,
     volumes                           => $volumes,
+    command                           => $command,
     remove_container_on_stop          => false,
     restart_service_on_docker_refresh => true,
     net                               => $network,

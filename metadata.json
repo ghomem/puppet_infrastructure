@@ -1,6 +1,6 @@
 {
   "name": "puppet_infrastructure",
-  "version": "0.9.4",
+  "version": "0.9.10",
   "author": "@ghomem and multiple contributors",
   "summary": "Common baseline Puppet Classes for infrastructure configuration and management",
   "license": "GPLv3",
