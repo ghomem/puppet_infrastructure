@@ -103,6 +103,8 @@ def main():
         for child in oval_definitions:
             if child.tag.endswith('definitions'):
                 definitions = child
+            if child.tag.endswith('tests'):
+                definition_tests = child
         for child in results:
             if child.tag.endswith('system'):
                 system = child
@@ -123,6 +125,15 @@ def main():
         print("Error parsing file %s" % input_file)
         print(str(exception))
         sys.exit(1)
+
+    # Map each test id to the object id it references
+    # (object ids cannot be derived from test ids: many tests reuse objects
+    # defined by earlier USNs, e.g. every nginx USN points to the same object)
+    test_to_object = {}
+    for test in definition_tests:
+        for test_child in test:
+            if test_child.tag.endswith('object'):
+                test_to_object[test.attrib['id']] = test_child.attrib['object_ref']
 
     # Filter out the security issues with priority above the threshold
     relevant_issues = []
@@ -191,8 +202,11 @@ def main():
                     evaluate_criteria(criteria_child)
             if criteria_child.tag.endswith('criterion'):
                 if criteria_child.attrib['result'] == 'true':
-                    test_id= criteria_child.attrib['test_ref']
-                    object_id = test_id.replace(':tst:', ':obj:')
+                    test_id = criteria_child.attrib['test_ref']
+                    object_id = test_to_object.get(test_id)
+                    if object_id is None:
+                        print('Warning: no object found for test %s' % test_id, file=sys.stderr)
+                        continue
                     if debug_output:
                         print('  %s' % object_id)
                     relevant_tests_objects_ids.add(object_id)
